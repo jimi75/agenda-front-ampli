@@ -29,12 +29,16 @@ jobs:
       - run: npm run check
       - run: npm test
 
-      - name: Comprovar que hi ha la URL de l'Apps Script
+      - name: Comprovar la URL de l'Apps Script
         env:
           AGENDA_API_URL: ${{ vars.AGENDA_API_URL }}
         run: |
           if [ -z "$AGENDA_API_URL" ]; then
             echo "::error::Falta la variable de repositori AGENDA_API_URL (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+          if [[ ! "$AGENDA_API_URL" =~ ^https://script\.google\.com/(a/macros/[^/]+|macros)/s/[A-Za-z0-9_-]+/exec$ ]]; then
+            echo "::error::AGENDA_API_URL no és una URL d'Apps Script completa. Ha de ser https://script.google.com/macros/s/XXXX/exec (valor actual: $AGENDA_API_URL)."
             exit 1
           fi
 

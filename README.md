@@ -38,7 +38,7 @@ La web **no lleva los datos dentro**: los pide al abrirse. Cambiar un evento en 
 
 1. El repositorio debe ser **público** (GitHub Pages gratis lo exige).
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-3. **Settings → Secrets and variables → Actions → pestaña Variables → New repository variable**: nombre `AGENDA_API_URL`, valor la URL `/exec` del paso anterior. La publicación falla con un mensaje claro si falta.
+3. **Settings → Secrets and variables → Actions → pestaña Variables → New repository variable**: nombre `AGENDA_API_URL`, valor la **URL completa** del paso anterior (`https://script.google.com/macros/s/XXXX/exec`, no solo `/exec`). La publicación falla con un mensaje claro si falta o no tiene ese formato. Si cambias la variable después, relanza el despliegue (pestaña **Actions → Desplegar a GitHub Pages → Run workflow**), porque la URL se incrusta al compilar.
 4. Haz `push` a `main`. El flujo [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) comprueba los tipos, ejecuta los tests, compila y publica en `https://jimi75.github.io/agenda-front-ampli/`.
 
 ### 3. Comprobaciones después de publicar
