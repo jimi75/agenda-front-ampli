@@ -116,6 +116,24 @@ test('hora de fi invàlida o anterior a l’inici s’ignora, però l’esdeveni
 	);
 });
 
+test('només s’accepten els dies de l’agenda (del 2 al 29 de novembre): l’1 i el 30 es descarten', () => {
+	const { events, skipped } = normalizeEvents([
+		row({ id: 'd01', data: '2026-11-01' }),
+		row({ id: 'd02', data: '2026-11-02' }),
+		row({ id: 'd29', data: '2026-11-29' }),
+		row({ id: 'd30', data: '2026-11-30' })
+	]);
+	assert.deepEqual(
+		events.map((e) => e.id),
+		['d02', 'd29']
+	);
+	assert.deepEqual(
+		skipped.map((s) => s.row),
+		[2, 5]
+	);
+	assert.match(skipped[0].reason, /fora de l’agenda \(del 2 al 29\)/);
+});
+
 test('entrada que no és una llista dona 0 esdeveniments', () => {
 	assert.deepEqual(normalizeEvents(null), { events: [], skipped: [] });
 	assert.deepEqual(normalizeEvents('x'), { events: [], skipped: [] });

@@ -11,19 +11,26 @@ export function isoDate(year, month, day) {
 }
 
 /**
- * @param {number} [year]
- * @param {number} [month]
+ * @typedef {{ year: number, month: number, firstDay?: number, lastDay?: number }} MonthRange
+ * `firstDay` and `lastDay` default to the whole month.
+ */
+
+/**
+ * @param {MonthRange} [range]
  * @returns {{ year: number, month: number, days: Day[], firstWeekday: number, rows: number }}
  */
-export function buildMonth(year = MONTH.year, month = MONTH.month) {
-	const count = new Date(Date.UTC(year, month, 0)).getUTCDate();
-	const firstWeekday = (new Date(Date.UTC(year, month - 1, 1)).getUTCDay() + 6) % 7;
-	const days = Array.from({ length: count }, (_, i) => ({
-		date: isoDate(year, month, i + 1),
-		day: i + 1,
+export function buildMonth(range = MONTH) {
+	const { year, month } = range;
+	const length = new Date(Date.UTC(year, month, 0)).getUTCDate();
+	const firstDay = range.firstDay ?? 1;
+	const lastDay = Math.min(range.lastDay ?? length, length);
+	const firstWeekday = (new Date(Date.UTC(year, month - 1, firstDay)).getUTCDay() + 6) % 7;
+	const days = Array.from({ length: lastDay - firstDay + 1 }, (_, i) => ({
+		date: isoDate(year, month, firstDay + i),
+		day: firstDay + i,
 		weekday: (firstWeekday + i) % 7
 	}));
-	return { year, month, days, firstWeekday, rows: Math.ceil((firstWeekday + count) / 7) };
+	return { year, month, days, firstWeekday, rows: Math.ceil((firstWeekday + days.length) / 7) };
 }
 
 /** Today in the campaign time zone as YYYY-MM-DD, whatever the device time zone is. */

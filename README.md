@@ -28,7 +28,7 @@ La web **no lleva los datos dentro**: los pide al abrirse. Cambiar un evento en 
 4. **Extensiones → Apps Script.** Se abre el editor con un archivo `Código.gs`. Borra todo su contenido y pega el de [`apps-script/Code.gs`](apps-script/Code.gs). Pulsa **Guardar** (💾).
 5. En el menú de la izquierda, **Configuración del proyecto** (⚙️) → marca *Mostrar el archivo de manifiesto "appsscript.json" en el editor*. Vuelve a **Editor** (`<>`), abre `appsscript.json`, borra todo su contenido y pega el de [`apps-script/appsscript.json`](apps-script/appsscript.json). Guarda.
 6. Abre `Código.gs` en la lista de archivos de la izquierda (con `appsscript.json` seleccionado no aparece el desplegable de funciones). Arriba, junto a **▶ Ejecutar** y **Depurar**, abre el desplegable de funciones, elige `setup` y pulsa **Ejecutar**. La primera vez pide permisos: **Revisar permisos** → tu cuenta → si sale *Google no ha verificado esta aplicación*, pulsa **Avanzada → Ir a (nombre del proyecto) (no seguro)** → **Permitir**. Es normal en scripts propios, y el script solo accede a esta hoja. Debe terminar con *Ejecución finalizada* en el registro.
-7. Vuelve a la hoja. Debes ver tres pestañas: `Esdeveniments` (con la cabecera `id, data, inici, fi, tipus, nom, lloc, mapa, estat`), `Inscripcions` (`data_hora, event_id, nom, request_id`) y `Config` (con `SI` en la celda B1). `setup` también deja listas desplegables en `Esdeveniments`: `data` (los 30 días de noviembre), `inici` y `fi` (de 06:00 a 23:55, de 5 en 5 minutos), `tipus` y `estat`. Las listas de fechas y horas están en las columnas E y F de `Config`: no las borres. Si `setup` falla a medias, corrige el código y vuelve a ejecutarlo: es seguro repetirlo y no toca eventos, inscripciones ni el interruptor `SI`/`NO`.
+7. Vuelve a la hoja. Debes ver tres pestañas: `Esdeveniments` (con la cabecera `id, data, inici, fi, tipus, nom, lloc, mapa, estat`), `Inscripcions` (`data_hora, event_id, nom, request_id`) y `Config` (con `SI` en la celda B1). `setup` también deja listas desplegables en `Esdeveniments`: `data` (los 28 días del 2 al 29 de noviembre), `inici` y `fi` (de 06:00 a 23:55, de 5 en 5 minutos), `tipus` y `estat`. Las listas de fechas y horas están en las columnas E y F de `Config`: no las borres. Si `setup` falla a medias, corrige el código y vuelve a ejecutarlo: es seguro repetirlo y no toca eventos, inscripciones ni el interruptor `SI`/`NO`.
 8. De vuelta en Apps Script: **Implementar → Nueva implementación**. Pulsa ⚙️ junto a *Seleccionar tipo* → **Aplicación web**. *Descripción*: `v1`. *Ejecutar como*: **Yo**. *Quién tiene acceso*: **Cualquier usuario**. Pulsa **Implementar** (si vuelve a pedir autorización, acéptala) y copia la **URL de la aplicación web**, que termina en `/exec`.
 9. Comprueba la URL: pégala en una pestaña del navegador añadiendo `?action=agenda` al final. Debe salir `{"ok":true,"v":1,"signupsOpen":true,"events":[],"signups":{}}`.
 
@@ -74,7 +74,7 @@ Recarga la URL `/exec?action=agenda`: el evento debe aparecer en `events` con `"
 | Columna | Obligatoria | Ejemplo | Notas |
 |---|---|---|---|
 | `id` | sí | `paradeta-1` | Único. Solo minúsculas, números y guiones (máx. 20). **No lo cambies** una vez haya gente apuntada: las inscripciones se enlazan por este id. |
-| `data` | sí | `2026-11-12` | Año-mes-día, y solo noviembre de 2026. |
+| `data` | sí | `2026-11-12` | Año-mes-día, del `2026-11-02` al `2026-11-29`. El 1 y el 30 no se muestran. |
 | `inici` | sí | `10:00` | `HH:MM`. |
 | `fi` | no | `14:00` | Si falta o es anterior al inicio, solo se muestra la hora de inicio. |
 | `tipus` | sí | `Acció` / `Acte` | Lista desplegable. Cualquier otro valor se trata como Acció. |
@@ -83,7 +83,7 @@ Recarga la URL `/exec?action=agenda`: el evento debe aparecer en `events` con `"
 | `mapa` | no | `https://maps.app.goo.gl/...` | Si lo pones (debe empezar por `https://`), se usa este enlace en vez de la búsqueda. |
 | `estat` | no | `Cancel·lat` / `Modificat` | Muestra la etiqueta en la tarjeta. Un evento cancelado no admite más inscripciones. |
 
-- Si una fila está mal (id repetido, fecha fuera de noviembre, hora inválida), **se omite solo esa fila** y el resto sigue funcionando. Para ver cuáles, abre la web con `?admin` al final de la URL (`.../agenda-front-ampli/?admin`): sale la lista con el número de fila y el motivo.
+- Si una fila está mal (id repetido, fecha fuera del 2 al 29 de noviembre, hora inválida), **se omite solo esa fila** y el resto sigue funcionando. Para ver cuáles, abre la web con `?admin` al final de la URL (`.../agenda-front-ampli/?admin`): sale la lista con el número de fila y el motivo.
 - Hasta 3 eventos por día es lo previsto, pero si pones más se muestran todos y la casilla crece.
 - Los eventos de un día se ordenan por hora de inicio.
 - Hay una plantilla en [`docs/plantilla-esdeveniments.csv`](docs/plantilla-esdeveniments.csv).
@@ -117,7 +117,7 @@ npm run build      # genera build/ (el flujo de GitHub lo hace con las variables
 
 ## Decisiones y límites
 
-- **Solo noviembre de 2026.** El mes está en `src/lib/config.js`; para otro mes habría que cambiar eso, `validDates_()` en `apps-script/Code.gs` (la lista de fechas de `setup()`) y los tests.
+- **Solo del 2 al 29 de noviembre de 2026.** Son cuatro semanas completas (de lunes a domingo), así que la cuadrícula no tiene casillas vacías. Los días están en `src/lib/config.js` (`MONTH.firstDay` y `MONTH.lastDay`) y, para la lista desplegable de la hoja, en `FIRST_DAY` y `LAST_DAY` de `apps-script/Code.gs`. Para otro mes habría que cambiar los dos sitios, el año y el mes en ambos, y los tests. Si cambias las fechas del script, vuelve a ejecutar `setup`: reconstruye la lista y borra las fechas sobrantes.
 - **Si Google falla**: la web muestra la última copia guardada en el dispositivo con el aviso "Dades de fa X min". Si no hay copia, muestra un error con botón *Torna-ho a provar*, nunca un calendario vacío.
 - **Si se envía un nombre y la respuesta no llega**, la web no reenvía: vuelve a leer la lista y, si el nombre está, da la inscripción por hecha.
 - **Eventos pasados y cancelados**: el modal se abre en solo lectura (se puede ver quién se apuntó, no apuntarse). Las tarjetas pasadas se ven en grises.

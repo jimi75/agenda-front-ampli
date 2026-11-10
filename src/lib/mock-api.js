@@ -12,7 +12,7 @@ const EVENTS = [
 	['mati-parc', '2026-11-21', '09:30', '12:00', 'Acció', 'Esmorzar i conversa al parc', 'Parc de Joan Miró, Barcelona', ''],
 	['concert', '2026-11-21', '19:00', '21:30', 'Acte', 'Concert i festa', 'Plaça del Sortidor, Barcelona', ''],
 	['mitin', '2026-11-28', '18:00', '20:00', 'Acte', 'Acte central de campanya', 'Auditori de la Zona Franca', 'Modificat'],
-	['tancament', '2026-11-30', '10:00', '13:00', 'Acció', 'Paradeta de tancament', 'Plaça de Sants, Barcelona', '']
+	['tancament', '2026-11-29', '10:00', '13:00', 'Acció', 'Paradeta de tancament', 'Plaça de Sants, Barcelona', '']
 ];
 
 const KEYS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'estat'];

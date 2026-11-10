@@ -186,9 +186,10 @@ test('setup(): validations are drop-down lists only (no locale-dependent formula
 	const dates = column(4);
 	const times = column(5);
 	assert.equal(dates[0], 'dates_valides');
-	assert.equal(dates.length, 31);
-	assert.equal(dates[1], '2026-11-01');
-	assert.equal(dates.at(-1), '2026-11-30');
+	assert.equal(dates.length, 1 + 28);
+	assert.equal(dates[1], '2026-11-02');
+	assert.equal(dates.at(-1), '2026-11-29');
+	assert.ok(!dates.includes('2026-11-01') && !dates.includes('2026-11-30'));
 	assert.equal(times[0], 'hores_valides');
 	assert.equal(times[1], '06:00');
 	assert.equal(times.at(-1), '23:55');
@@ -196,6 +197,23 @@ test('setup(): validations are drop-down lists only (no locale-dependent formula
 	assert.ok([...dates.slice(1), ...times.slice(1)].every((v) => typeof v === 'string'));
 	assert.ok(times.slice(1).every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)));
 	assert.equal(config[0][1], 'SI', 'the open/closed switch is not touched by the lists');
+});
+
+test('setup(): una nova execució esborra les dates sobrants d’una llista anterior més llarga', () => {
+	const script = createScript({ config: null });
+	script.context.setup();
+	const config = script.sheets.get('Config').rows;
+	// Run of the previous version: 30 days (1 to 30) in column E, i.e. rows 2 to 31.
+	config[29] = config[29] ?? [];
+	config[30] = config[30] ?? [];
+	config[29][4] = '2026-11-29';
+	config[30][4] = '2026-11-30';
+	script.context.setup();
+	const dates = config.map((row) => row[4]).filter((v) => v !== undefined && v !== '');
+	assert.equal(dates.length, 1 + 28);
+	assert.equal(dates.at(-1), '2026-11-29');
+	assert.ok(!dates.includes('2026-11-30'));
+	assert.ok(config[30]?.[4] === undefined || config[30][4] === '');
 });
 
 test('setup(): creates the three tabs with headers and never overwrites existing data', () => {

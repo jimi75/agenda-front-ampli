@@ -31,6 +31,10 @@ class FakeSheet {
 		return this.rows.length;
 	}
 
+	getMaxRows() {
+		return 1000;
+	}
+
 	setFrozenRows(n) {
 		this.frozenRows = n;
 	}
@@ -81,7 +85,15 @@ class FakeSheet {
 				});
 				return this;
 			},
-			setDataValidation: (rule) => sheet.validations.push([`${a},${b}`, rule])
+			setDataValidation: (rule) => sheet.validations.push([`${a},${b}`, rule]),
+			clearContent() {
+				for (let r = a - 1; r < a - 1 + (c ?? 1); r++) {
+					for (let col = b - 1; col < b - 1 + (d ?? 1); col++) {
+						if (sheet.rows[r]) sheet.rows[r][col] = undefined;
+					}
+				}
+				return this;
+			}
 		};
 	}
 }

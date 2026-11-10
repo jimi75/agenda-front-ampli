@@ -15,6 +15,9 @@ var SHEET_CONFIG = 'Config';
 var EVENT_COLUMNS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
 var SIGNUP_COLUMNS = ['data_hora', 'event_id', 'nom', 'request_id'];
 var COLUMN_KIND = { data: 'date', inici: 'time', fi: 'time' };
+// Days of November 2026 shown by the agenda (Monday 2 to Sunday 29). Same as src/lib/config.js.
+var FIRST_DAY = 2;
+var LAST_DAY = 29;
 var MAX_SIGNUPS_PER_EVENT = 150;
 var MAX_SIGNUPS_TOTAL = 3000;
 var LOCK_WAIT_MS = 10000;
@@ -219,10 +222,10 @@ function setup() {
   signups.getRange('A:D').setNumberFormat('@');
 }
 
-/** The 30 days of the month covered by the agenda, as YYYY-MM-DD. */
+/** The days shown by the agenda, as YYYY-MM-DD. */
 function validDates_() {
   var dates = [];
-  for (var day = 1; day <= 30; day++) dates.push('2026-11-' + (day < 10 ? '0' : '') + day);
+  for (var day = FIRST_DAY; day <= LAST_DAY; day++) dates.push('2026-11-' + (day < 10 ? '0' : '') + day);
   return dates;
 }
 
@@ -238,6 +241,8 @@ function validTimes_() {
 }
 
 function writeList_(sheet, column, header, values) {
+  // The list can be shorter than in a previous run, so clear the whole column first.
+  sheet.getRange(1, column, sheet.getMaxRows(), 1).clearContent();
   var range = sheet.getRange(1, column, values.length + 1, 1);
   range.setNumberFormat('@');
   range.setValues(

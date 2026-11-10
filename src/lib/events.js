@@ -46,7 +46,7 @@ export function mapsUrl(place, custom) {
 	return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 }
 
-/** @param {string} date @param {{ year: number, month: number }} month */
+/** @param {string} date @param {import('./month.js').MonthRange} month */
 function isDateInMonth(date, month) {
 	const match = DATE_RE.exec(date);
 	if (!match) return false;
@@ -55,6 +55,8 @@ function isDateInMonth(date, month) {
 	return (
 		year === month.year &&
 		mon === month.month &&
+		day >= (month.firstDay ?? 1) &&
+		day <= (month.lastDay ?? 31) &&
 		check.getUTCFullYear() === year &&
 		check.getUTCMonth() === mon - 1 &&
 		check.getUTCDate() === day
@@ -78,7 +80,7 @@ const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
  * Turns raw sheet rows into valid events. Invalid rows are skipped and reported,
  * never thrown, so one typo in the sheet cannot blank the whole agenda.
  * @param {unknown} rows
- * @param {{ year: number, month: number }} [month]
+ * @param {import('./month.js').MonthRange} [month]
  * @returns {{ events: AgendaEvent[], skipped: SkippedRow[] }}
  */
 export function normalizeEvents(rows, month = MONTH) {
@@ -99,7 +101,11 @@ export function normalizeEvents(rows, month = MONTH) {
 		let reason = '';
 		if (!ID_RE.test(id)) reason = 'id no vàlid';
 		else if (seen.has(id)) reason = 'id repetit';
-		else if (!isDateInMonth(date, month)) reason = 'data fora de novembre o amb format incorrecte';
+		else if (!isDateInMonth(date, month)) {
+			const from = month.firstDay ?? 1;
+			const to = month.lastDay ?? 31;
+			reason = `data fora de l’agenda (del ${from} al ${to}) o amb format incorrecte`;
+		}
 		else if (!TIME_RE.test(start)) reason = 'hora d’inici no vàlida';
 		else if (!name) reason = 'falta el nom';
 		if (reason) {
