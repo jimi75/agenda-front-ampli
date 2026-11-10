@@ -1,0 +1,259 @@
+/**
+ * Agenda Frontamplista Sants-Montjuïc: backend as a Google Apps Script web app.
+ *
+ * - doGet  ?action=agenda  -> events + sign-ups as JSON
+ * - doPost {action:"signup"} (sent as text/plain, see src/lib/api.js) -> adds one sign-up
+ *
+ * Create it from the sheet (Extensions > Apps Script) so it is bound to that sheet only.
+ * @OnlyCurrentDoc
+ */
+
+var API_VERSION = 1;
+var SHEET_EVENTS = 'Esdeveniments';
+var SHEET_SIGNUPS = 'Inscripcions';
+var SHEET_CONFIG = 'Config';
+var EVENT_COLUMNS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
+var SIGNUP_COLUMNS = ['data_hora', 'event_id', 'nom', 'request_id'];
+var COLUMN_KIND = { data: 'date', inici: 'time', fi: 'time' };
+var MAX_SIGNUPS_PER_EVENT = 150;
+var MAX_SIGNUPS_TOTAL = 3000;
+var LOCK_WAIT_MS = 10000;
+var REQUEST_ID_TTL_SECONDS = 600;
+// Same rule as src/lib/names.js. The first character is a letter or digit, so a name can
+// never start with = + - @ and be read as a formula. This copy is the one that counts.
+var NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .'’·_-]{0,29}$/u;
+var REQUEST_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+
+function doGet(e) {
+  try {
+    var action = e && e.parameter && e.parameter.action;
+    if (action !== 'agenda') return json_({ ok: false, v: API_VERSION, error: 'bad_request' });
+    return json_(readAgenda_());
+  } catch (err) {
+    console.error(err);
+    return json_({ ok: false, v: API_VERSION, error: 'server' });
+  }
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try {
+    var body = parseBody_(e);
+    if (!body || body.action !== 'signup') return fail_('bad_request');
+    var eventId = typeof body.eventId === 'string' ? body.eventId : '';
+    var requestId = typeof body.requestId === 'string' ? body.requestId : '';
+    if (!eventId || eventId.length > 20 || !REQUEST_ID_RE.test(requestId)) return fail_('bad_request');
+    var name = typeof body.name === 'string' ? cleanName_(body.name) : '';
+    if (!NAME_RE.test(name)) return fail_('invalid_name');
+
+    locked = lock.tryLock(LOCK_WAIT_MS);
+    if (!locked) return fail_('busy');
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var tz = ss.getSpreadsheetTimeZone();
+    if (!isOpen_(ss)) return fail_('closed');
+
+    var eventIds = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz).map(function (r) {
+      return r.id;
+    });
+    if (eventIds.indexOf(eventId) === -1) return fail_('unknown_event');
+
+    var cache = CacheService.getScriptCache();
+    var signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
+    // A request that already reached the sheet (the answer was lost) must not be written twice.
+    if (!cache.get('req:' + requestId)) {
+      var forEvent = signups.filter(function (r) {
+        return r.event_id === eventId;
+      });
+      if (forEvent.length >= MAX_SIGNUPS_PER_EVENT) return fail_('event_full');
+      if (signups.length >= MAX_SIGNUPS_TOTAL) return fail_('closed');
+      appendSignup_(ss, tz, eventId, name, requestId);
+      cache.put('req:' + requestId, '1', REQUEST_ID_TTL_SECONDS);
+      signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
+    }
+    return json_({ ok: true, v: API_VERSION, eventId: eventId, names: namesFor_(signups, eventId) });
+  } catch (err) {
+    console.error(err);
+    return fail_('server');
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+}
+
+function readAgenda_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tz = ss.getSpreadsheetTimeZone();
+  var events = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz);
+  var rows = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
+  var signups = {};
+  events.forEach(function (event) {
+    var names = namesFor_(rows, event.id);
+    if (names.length) signups[event.id] = names;
+  });
+  return { ok: true, v: API_VERSION, signupsOpen: isOpen_(ss), events: events, signups: signups };
+}
+
+function namesFor_(signupRows, eventId) {
+  return signupRows
+    .filter(function (r) {
+      return r.event_id === eventId && r.nom !== '';
+    })
+    .map(function (r) {
+      return r.nom;
+    });
+}
+
+function appendSignup_(ss, tz, eventId, name, requestId) {
+  var sheet = ss.getSheetByName(SHEET_SIGNUPS);
+  if (!sheet) throw new Error('Falta la pestanya ' + SHEET_SIGNUPS);
+  var stamp = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss");
+  var range = sheet.getRange(sheet.getLastRow() + 1, 1, 1, SIGNUP_COLUMNS.length);
+  // Plain text format first: a second barrier so nothing written here is ever evaluated as a formula.
+  range.setNumberFormat('@');
+  range.setValues([[stamp, eventId, name, requestId]]);
+  SpreadsheetApp.flush();
+}
+
+/**
+ * Reads a tab by header name, not by column position, so reordering columns does not break it.
+ * Cells that Sheets turned into dates/times are converted back to YYYY-MM-DD and HH:MM.
+ * Each row carries `row`, its row number in the sheet, to point at typos.
+ */
+function readTable_(sheet, columns, tz) {
+  if (!sheet) return [];
+  var range = sheet.getDataRange();
+  var raw = range.getValues();
+  var shown = range.getDisplayValues();
+  if (shown.length < 2) return [];
+  var index = {};
+  shown[0].forEach(function (header, i) {
+    index[String(header).trim().toLowerCase()] = i;
+  });
+  var rows = [];
+  for (var r = 1; r < shown.length; r++) {
+    var row = { row: r + 1 };
+    var empty = true;
+    columns.forEach(function (name) {
+      var c = index[name];
+      var text = c === undefined ? '' : cellText_(raw[r][c], shown[r][c], COLUMN_KIND[name], tz);
+      if (text !== '') empty = false;
+      row[name] = text;
+    });
+    if (!empty) rows.push(row);
+  }
+  return rows;
+}
+
+function cellText_(value, display, kind, tz) {
+  if (value instanceof Date && kind) {
+    return Utilities.formatDate(value, tz, kind === 'time' ? 'HH:mm' : 'yyyy-MM-dd');
+  }
+  return String(display).trim();
+}
+
+function isOpen_(ss) {
+  var sheet = ss.getSheetByName(SHEET_CONFIG);
+  if (!sheet) return true;
+  return String(sheet.getRange('B1').getDisplayValue()).trim().toUpperCase() !== 'NO';
+}
+
+function cleanName_(value) {
+  return value.normalize('NFC').replace(/\s+/g, ' ').trim();
+}
+
+function parseBody_(e) {
+  var contents = e && e.postData && e.postData.contents;
+  if (typeof contents !== 'string' || contents.length > 2000) return null;
+  try {
+    return JSON.parse(contents);
+  } catch (err) {
+    return null;
+  }
+}
+
+function json_(object) {
+  return ContentService.createTextOutput(JSON.stringify(object)).setMimeType(
+    ContentService.MimeType.JSON
+  );
+}
+
+// Always HTTP 200: a non-200 answer from Apps Script comes without CORS headers
+// and the page could not tell what went wrong.
+function fail_(error) {
+  return json_({ ok: false, v: API_VERSION, error: error });
+}
+
+/**
+ * Run once from the Apps Script editor (select "setup" > Run). It creates the three tabs
+ * with their headers, plain-text columns and drop-down lists. It never overwrites events,
+ * sign-ups or the open/closed switch, so running it again is safe (it rebuilds the lists).
+ */
+function setup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var config = ss.getSheetByName(SHEET_CONFIG) || ss.insertSheet(SHEET_CONFIG);
+  if (config.getRange('A1').getDisplayValue() === '') {
+    config.getRange('A1:C1').setValues([['inscripcions_obertes', 'SI', 'Posa NO per tancar les inscripcions']]);
+  }
+  // Lists for the drop-downs of dates and times. Only list-based rules are used, never custom
+  // formulas: Sheets reads those with the sheet's locale (; or , as separator) and rejects them.
+  var dates = validDates_();
+  var times = validTimes_();
+  writeList_(config, 5, 'dates_valides', dates);
+  writeList_(config, 6, 'hores_valides', times);
+
+  var events = ensureSheet_(ss, SHEET_EVENTS, EVENT_COLUMNS);
+  events.getRange('A:I').setNumberFormat('@');
+  var rules = [
+    ['E2:E', SpreadsheetApp.newDataValidation().requireValueInList(['Acció', 'Acte'], true)],
+    ['I2:I', SpreadsheetApp.newDataValidation().requireValueInList(['Cancel·lat', 'Modificat'], true)],
+    ['B2:B', SpreadsheetApp.newDataValidation().requireValueInRange(config.getRange(2, 5, dates.length, 1), true)],
+    ['C2:D', SpreadsheetApp.newDataValidation().requireValueInRange(config.getRange(2, 6, times.length, 1), true)]
+  ];
+  rules.forEach(function (rule) {
+    events.getRange(rule[0]).setDataValidation(rule[1].setAllowInvalid(false).build());
+  });
+
+  var signups = ensureSheet_(ss, SHEET_SIGNUPS, SIGNUP_COLUMNS);
+  signups.getRange('A:D').setNumberFormat('@');
+}
+
+/** The 30 days of the month covered by the agenda, as YYYY-MM-DD. */
+function validDates_() {
+  var dates = [];
+  for (var day = 1; day <= 30; day++) dates.push('2026-11-' + (day < 10 ? '0' : '') + day);
+  return dates;
+}
+
+/** 06:00 to 23:55 in steps of 5 minutes, as HH:MM. */
+function validTimes_() {
+  var times = [];
+  for (var minutes = 6 * 60; minutes < 24 * 60; minutes += 5) {
+    var h = Math.floor(minutes / 60);
+    var m = minutes % 60;
+    times.push((h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m);
+  }
+  return times;
+}
+
+function writeList_(sheet, column, header, values) {
+  var range = sheet.getRange(1, column, values.length + 1, 1);
+  range.setNumberFormat('@');
+  range.setValues(
+    [[header]].concat(
+      values.map(function (value) {
+        return [value];
+      })
+    )
+  );
+}
+
+function ensureSheet_(ss, name, columns) {
+  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, columns.length).setNumberFormat('@').setValues([columns]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}

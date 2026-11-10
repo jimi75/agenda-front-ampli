@@ -1,0 +1,60 @@
+name: Desplegar a GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+      - name: Comprovar que hi ha la URL de l'Apps Script
+        env:
+          AGENDA_API_URL: ${{ vars.AGENDA_API_URL }}
+        run: |
+          if [ -z "$AGENDA_API_URL" ]; then
+            echo "::error::Falta la variable de repositori AGENDA_API_URL (Settings > Secrets and variables > Actions > Variables)."
+            exit 1
+          fi
+
+      - uses: actions/configure-pages@v6
+
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}
+          VITE_AGENDA_API_URL: ${{ vars.AGENDA_API_URL }}
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
