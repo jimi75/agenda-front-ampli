@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_e2e:
+        description: Ometre les proves de navegador (només per desplegar una reversió amb el CI en vermell)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +33,14 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+
+      - name: Instal·lar Chromium per a les proves de navegador
+        if: ${{ !inputs.skip_e2e }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Proves de navegador
+        if: ${{ !inputs.skip_e2e }}
+        run: npm run test:e2e -- --project=chromium --project=mobile
 
       - name: Comprovar la URL de l'Apps Script
         env:
