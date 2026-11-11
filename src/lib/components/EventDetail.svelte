@@ -179,7 +179,7 @@
 	@media (min-width: 1024px) {
 		dialog {
 			width: min(40rem, calc(100% - 2rem));
-			height: auto;
+			height: fit-content;
 			margin: auto;
 		}
 

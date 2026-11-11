@@ -102,8 +102,8 @@
 
 	/* Resets what .tags gives the type label: this is a link in body text. The padding is an invisible touch target. */
 	.detail {
-		margin: -0.3rem -0.25rem -0.3rem auto;
-		padding: 0.3rem 0.25rem;
+		margin: -0.3rem 0 -0.3rem auto;
+		padding: 0.3rem 0 0.3rem 0.4rem;
 		font-size: 1rem;
 		font-weight: 400;
 		letter-spacing: normal;
