@@ -75,7 +75,7 @@
 			</div>
 
 			{#if event}
-				<h2 id="detail-title" class:cancelled={participation === 'cancelled'}>{event.name}</h2>
+				<h2 id="detail-title" class:cancelled={event.status === 'cancelled'}>{event.name}</h2>
 				<p class="when">{dateLabel} · {formatRange(event.start, event.end)}</p>
 				{#if event.place}
 					<p class="where">

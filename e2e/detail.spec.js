@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { EVENT_HEADER } from '../apps-script/fake-google.js';
 import { T } from '../src/lib/texts.js';
 import { card, cards, detailDialog, openAgenda, signupDialog } from './helpers.js';
 
@@ -137,6 +138,22 @@ for (const [id, note] of [
 		await expect(signupDialog(page)).toHaveCount(0);
 	});
 }
+
+test('un esdeveniment passat i cancel·lat conserva el nom ratllat, a la targeta i al detall', async ({ page }) => {
+	await openAgenda(page, {
+		prepare: ({ script }) => {
+			const row = script.sheets.get('Esdeveniments')?.rows.find((r) => r[0] === 'pasat-1');
+			if (row) row[EVENT_HEADER.indexOf('estat')] = 'Cancel·lat';
+		}
+	});
+	await expect(card(page, 'pasat-1').locator('.name')).toHaveCSS('text-decoration-line', 'line-through');
+
+	await card(page, 'pasat-1').getByRole('button', { name: /^Veure qui s’ha apuntat/ }).click();
+	const detail = detailDialog(page);
+	await expect(detail.getByRole('heading', { level: 2 })).toHaveCSS('text-decoration-line', 'line-through');
+	// Past wins over cancelled for what a person can do: the note is the past one.
+	await expect(detail).toContainText(T.dialog.pastNote);
+});
 
 test('Esc tanca només el diàleg de dalt i el focus torna a qui l’ha obert', async ({ page }) => {
 	await openAgenda(page);

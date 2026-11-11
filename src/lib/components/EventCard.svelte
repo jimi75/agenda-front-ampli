@@ -22,7 +22,7 @@
 	}
 </script>
 
-<article class="event {event.type}" class:past={state === 'past'} class:cancelled={state === 'cancelled'}>
+<article class="event {event.type}" class:past={state === 'past'} class:cancelled={event.status === 'cancelled'}>
 	<p class="tags">
 		<span class="type">{T.types[event.type]}</span>
 		{#if event.status}<span class="status">{T.status[event.status]}</span>{/if}
