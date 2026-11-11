@@ -83,13 +83,10 @@ export const T = {
 		purpose: 'Apunta’t per avisar que hi vindràs.',
 		privacy:
 			'El teu nom serà visible per a qualsevol persona que tingui l’enllaç. Posa-hi només el teu nom de pila o un àlies.',
-		correction: 'Si t’has equivocat, escriu a qui organitza: només ell pot esborrar noms.',
 		nameLabel: 'El teu nom o àlies',
 		submit: 'Apunta’m',
 		sending: 'Enviant…',
 		success: 'Fet! S’ha registrat la teva participació.',
-		listTitle: 'Persones apuntades',
-		listEmpty: 'Encara no s’ha apuntat ningú.',
 		closed: 'Les inscripcions estan tancades.',
 		pastNote: 'Aquesta activitat ja ha passat: no s’hi pot apuntar ningú més.',
 		cancelledNote: 'Aquesta activitat s’ha cancel·lat: no s’hi pot apuntar ningú més.'

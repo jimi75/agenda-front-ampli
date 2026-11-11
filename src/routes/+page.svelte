@@ -1,12 +1,16 @@
 <script>
 	import { onMount, tick } from 'svelte';
-	import { createApi } from '#lib/api.js';
+	import { browserStorage, createApi } from '#lib/api.js';
 	import Calendar from '#lib/components/Calendar.svelte';
+	import EventDetail from '#lib/components/EventDetail.svelte';
 	import Header from '#lib/components/Header.svelte';
 	import Legend from '#lib/components/Legend.svelte';
 	import SignupDialog from '#lib/components/SignupDialog.svelte';
-	import { groupByDate, normalizeEvents } from '#lib/events.js';
+	import { groupByDate, normalizeEvents, parseEventParam } from '#lib/events.js';
 	import { buildMonth, todayIso } from '#lib/month.js';
+	import { readMine } from '#lib/my-signups.js';
+	import { detailUrl } from '#lib/share.js';
+	import { participationState } from '#lib/state.js';
 	import { T } from '#lib/texts.js';
 
 	const month = buildMonth();
@@ -18,6 +22,7 @@
 	 *   events: import('#lib/events.js').AgendaEvent[],
 	 *   skipped: import('#lib/events.js').SkippedRow[],
 	 *   missingColumns: string[],
+	 *   features: string[],
 	 *   signups: Map<string, string[]>,
 	 *   signupsOpen: boolean,
 	 *   staleSince: number | null
@@ -31,25 +36,25 @@
 	// The cast keeps TypeScript from narrowing `data` to `null` inside the derived values below.
 	let data = $state.raw(/** @type {AgendaData | null} */ (null));
 	/** @type {string | null} */
-	let selectedId = $state(null);
+	let detailId = $state(null);
+	/** @type {string | null} */
+	let signupId = $state(null);
+	/** This browser's own signups: only a count for `?admin` until the unsignup arrives. */
+	let mine = $state.raw(/** @type {import('#lib/my-signups.js').MySignup[]} */ ([]));
 	let today = $state('');
 	let showAdmin = $state(false);
 	let lastLoad = 0;
+	// The detail opened from a `?e=` link has no opener to give the focus back to.
+	let openedFromLink = false;
 
 	const byDate = $derived(groupByDate(data?.events ?? []));
-	const selected = $derived(data?.events.find((e) => e.id === selectedId) ?? null);
-	const selectedDay = $derived(month.days.find((d) => d.date === selected?.date));
-	const readOnlyReason = $derived(
-		!selected
-			? ''
-			: selected.status === 'cancelled'
-				? 'cancelled'
-				: today !== '' && selected.date < today
-					? 'past'
-					: data?.signupsOpen === false
-						? 'closed'
-						: ''
+	const detailEvent = $derived(data?.events.find((e) => e.id === detailId) ?? null);
+	const signupEvent = $derived(data?.events.find((e) => e.id === signupId) ?? null);
+	const notFound = $derived(detailId !== null && detailEvent === null);
+	const detailState = $derived(
+		detailEvent ? participationState(detailEvent, { today, signupsOpen: data?.signupsOpen ?? true }) : null
 	);
+	const detailLink = $derived(detailEvent ? detailUrl(location, detailEvent.id) : '');
 	const staleMinutes = $derived(
 		data?.staleSince ? Math.max(0, Math.round((Date.now() - data.staleSince) / 60_000)) : 0
 	);
@@ -69,6 +74,7 @@
 			events,
 			skipped,
 			missingColumns: agenda.missingColumns,
+			features: agenda.features,
 			signups: agenda.signups,
 			signupsOpen: agenda.signupsOpen,
 			staleSince: agenda.staleSince
@@ -100,17 +106,38 @@
 		document.getElementById(`dia-${next.date}`)?.scrollIntoView({ block: 'start' });
 	}
 
+	/** @param {import('#lib/events.js').AgendaEvent | null} event */
+	function dateLabelOf(event) {
+		const day = month.days.find((d) => d.date === event?.date);
+		return day ? T.dateLabel(day.weekday, day.day) : '';
+	}
+
 	/** @param {string} id */
-	function open(id) {
-		selectedId = id;
+	function openDetail(id) {
+		detailId = id;
+	}
+
+	function closeDetail() {
+		detailId = null;
+		if (!openedFromLink) return;
+		openedFromLink = false;
+		const title = document.querySelector('h1');
+		title?.setAttribute('tabindex', '-1');
+		title?.focus();
+	}
+
+	/** @param {string} id */
+	function openSignup(id) {
+		signupId = id;
 		load({ silent: true });
 	}
 
 	/** @param {string} name @returns {Promise<import('#lib/api.js').SignupResult>} */
 	async function signup(name) {
-		const id = selectedId;
+		const id = signupId;
 		if (!api || !id || !data) return { ok: false, error: 'server' };
 		const result = await api.signup(id, name, data.signups.get(id)?.length ?? 0);
+		mine = readMine(browserStorage());
 		if (result.ok) {
 			data = { ...data, signups: new Map(data.signups).set(id, result.names) };
 		} else if (result.error === 'closed') {
@@ -127,6 +154,7 @@
 	onMount(async () => {
 		today = todayIso();
 		showAdmin = new URLSearchParams(location.search).has('admin');
+		mine = readMine(browserStorage());
 		if (API_URL) {
 			api = createApi({ url: API_URL });
 		} else if (import.meta.env.DEV) {
@@ -137,7 +165,15 @@
 			return;
 		}
 		await load();
-		if (status === 'ready') anchorToUpcoming();
+		if (status !== 'ready') return;
+		// A shared link is read once, here: a failed first load does not read it again on retry.
+		const linkedId = parseEventParam(location.search);
+		if (linkedId === null) {
+			anchorToUpcoming();
+		} else {
+			openedFromLink = true;
+			detailId = linkedId;
+		}
 	});
 </script>
 
@@ -168,8 +204,9 @@
 		<p class="notice" role="status">{T.staleData(staleMinutes)}</p>
 	{/if}
 
-	{#if showAdmin && data && (data.skipped.length || data.missingColumns.length)}
+	{#if showAdmin && data}
 		<div class="notice">
+			<p>features: {data.features.length ? data.features.join(', ') : '—'} · local signups: {mine.length}</p>
 			{#if data.missingColumns.length}
 				<p><strong>{T.missingColumns(data.missingColumns)}</strong></p>
 			{/if}
@@ -192,7 +229,8 @@
 			signups={data?.signups ?? new Map()}
 			{today}
 			signupsOpen={data?.signupsOpen ?? true}
-			onselect={open}
+			ondetail={openDetail}
+			onparticipate={openSignup}
 		/>
 		{#if status === 'ready' && data && data.events.length === 0}
 			<p class="notice">{T.empty}</p>
@@ -200,13 +238,23 @@
 	{/if}
 </main>
 
+<EventDetail
+	event={detailEvent}
+	names={detailEvent ? (data?.signups.get(detailEvent.id) ?? []) : []}
+	state={detailState}
+	dateLabel={dateLabelOf(detailEvent)}
+	url={detailLink}
+	{notFound}
+	onclose={closeDetail}
+	onparticipate={openSignup}
+/>
+
 <SignupDialog
-	event={selected}
-	names={selected ? (data?.signups.get(selected.id) ?? []) : []}
-	dateLabel={selectedDay ? T.dateLabel(selectedDay.weekday, selectedDay.day) : ''}
-	{readOnlyReason}
+	event={signupEvent}
+	dateLabel={dateLabelOf(signupEvent)}
+	features={data?.features ?? []}
 	onsubmit={signup}
-	onclose={() => (selectedId = null)}
+	onclose={() => (signupId = null)}
 />
 
 <style>

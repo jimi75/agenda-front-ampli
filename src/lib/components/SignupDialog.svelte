@@ -8,14 +8,13 @@
 	/**
 	 * @type {{
 	 *   event: import('#lib/events.js').AgendaEvent | null,
-	 *   names: string[],
 	 *   dateLabel: string,
-	 *   readOnlyReason: '' | 'past' | 'cancelled' | 'closed',
+	 *   features: string[],
 	 *   onsubmit: (name: string) => Promise<import('#lib/api.js').SignupResult>,
 	 *   onclose: () => void
 	 * }}
 	 */
-	let { event, names, dateLabel, readOnlyReason, onsubmit, onclose } = $props();
+	let { event, dateLabel, features, onsubmit, onclose } = $props();
 
 	/** @type {HTMLDialogElement | undefined} */
 	let dialog = $state();
@@ -39,16 +38,6 @@
 			dialog.close();
 		}
 	});
-
-	const readOnlyNote = $derived(
-		readOnlyReason === 'past'
-			? T.dialog.pastNote
-			: readOnlyReason === 'cancelled'
-				? T.dialog.cancelledNote
-				: readOnlyReason === 'closed'
-					? T.dialog.closed
-					: ''
-	);
 
 	/** @param {SubmitEvent} submitEvent */
 	async function submit(submitEvent) {
@@ -95,51 +84,33 @@
 				</button>
 			</div>
 
-			{#if readOnlyNote}
-				<p class="note">{readOnlyNote}</p>
+			<p class="purpose">{T.dialog.purpose}</p>
+			{#if phase === 'done'}
+				<p class="success" role="status">{T.dialog.success}</p>
+				{#if features.includes('unsignup')}<p class="hint">{T.participation.hint}</p>{/if}
 			{:else}
-				<p class="purpose">{T.dialog.purpose}</p>
-				{#if phase === 'done'}
-					<p class="success" role="status">{T.dialog.success}</p>
-				{:else}
-					<form onsubmit={submit} novalidate>
-						<label for="signup-name">{T.dialog.nameLabel}</label>
-						<input
-							id="signup-name"
-							type="text"
-							bind:this={input}
-							bind:value={name}
-							maxlength={MAX_NAME_LENGTH}
-							autocomplete="nickname"
-							autocapitalize="words"
-							enterkeyhint="send"
-							disabled={phase === 'sending'}
-							aria-describedby="signup-privacy"
-							aria-invalid={error ? 'true' : undefined}
-						/>
-						<p id="signup-privacy" class="privacy">{T.dialog.privacy}</p>
-						<p class="error" role="alert">{error}</p>
-						<button type="submit" class="submit" disabled={phase === 'sending'}>
-							{phase === 'sending' ? T.dialog.sending : T.dialog.submit}
-						</button>
-					</form>
-				{/if}
+				<form onsubmit={submit} novalidate>
+					<label for="signup-name">{T.dialog.nameLabel}</label>
+					<input
+						id="signup-name"
+						type="text"
+						bind:this={input}
+						bind:value={name}
+						maxlength={MAX_NAME_LENGTH}
+						autocomplete="nickname"
+						autocapitalize="words"
+						enterkeyhint="send"
+						disabled={phase === 'sending'}
+						aria-describedby="signup-privacy"
+						aria-invalid={error ? 'true' : undefined}
+					/>
+					<p id="signup-privacy" class="privacy">{T.dialog.privacy}</p>
+					<p class="error" role="alert">{error}</p>
+					<button type="submit" class="submit" disabled={phase === 'sending'}>
+						{phase === 'sending' ? T.dialog.sending : T.dialog.submit}
+					</button>
+				</form>
 			{/if}
-
-			<section>
-				<h3>{T.dialog.listTitle} ({names.length})</h3>
-				{#if names.length === 0}
-					<p class="empty">{T.dialog.listEmpty}</p>
-				{:else}
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-					<ul class="names" tabindex="0" aria-label={T.dialog.listTitle}>
-						{#each names as person, i (i)}
-							<li>{person}</li>
-						{/each}
-					</ul>
-				{/if}
-				{#if !readOnlyNote}<p class="correction">{T.dialog.correction}</p>{/if}
-			</section>
 		</div>
 	{/if}
 </dialog>
@@ -230,17 +201,9 @@
 		cursor: pointer;
 	}
 
-	.purpose,
-	.note {
+	.purpose {
 		margin: 1rem 0 0.75rem;
 		font-weight: 600;
-	}
-
-	.note {
-		padding: 0.6rem 0.75rem;
-		background: var(--lime);
-		color: var(--ink);
-		border-left: 6px solid var(--orange);
 	}
 
 	form {
@@ -269,8 +232,7 @@
 		box-shadow: inset 0 0 0 1px var(--orange);
 	}
 
-	.privacy,
-	.correction {
+	.privacy {
 		margin: 0;
 		font-size: 0.85rem;
 	}
@@ -305,46 +267,8 @@
 		font-weight: 700;
 	}
 
-	section {
-		margin-top: 1.1rem;
-		padding-top: 0.9rem;
-		border-top: 1px solid var(--lime-dark);
-	}
-
-	h3 {
-		margin: 0 0 0.5rem;
-		font-family: var(--font-display);
-		font-weight: 400;
-		font-size: 1.4rem;
-		color: var(--rust);
-		text-transform: uppercase;
-	}
-
-	.names {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-		max-height: 11rem;
-		margin: 0;
-		padding: 0.15rem;
-		overflow: auto;
-		list-style: none;
-	}
-
-	.names li {
-		padding: 0.25rem 0.65rem;
-		background: var(--lime);
-		color: var(--rust);
-		font-weight: 600;
-		border-radius: 999px;
-		overflow-wrap: anywhere;
-	}
-
-	.empty {
-		margin: 0;
-	}
-
-	.correction {
-		margin-top: 0.75rem;
+	.hint {
+		margin: 0.75rem 0 0;
+		font-size: 0.85rem;
 	}
 </style>

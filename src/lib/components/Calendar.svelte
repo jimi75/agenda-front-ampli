@@ -1,5 +1,6 @@
 <script>
 	import EventCard from './EventCard.svelte';
+	import { participationState } from '#lib/state.js';
 	import { T } from '#lib/texts.js';
 
 	/**
@@ -9,10 +10,11 @@
 	 *   signups: Map<string, string[]>,
 	 *   today: string,
 	 *   signupsOpen: boolean,
-	 *   onselect: (id: string) => void
+	 *   ondetail: (id: string) => void,
+	 *   onparticipate: (id: string) => void
 	 * }}
 	 */
-	let { month, byDate, signups, today, signupsOpen, onselect } = $props();
+	let { month, byDate, signups, today, signupsOpen, ondetail, onparticipate } = $props();
 </script>
 
 <div class="calendar">
@@ -45,9 +47,9 @@
 						{event}
 						count={signups.get(event.id)?.length ?? 0}
 						dateLabel={T.dateLabel(d.weekday, d.day)}
-						{past}
-						{signupsOpen}
-						{onselect}
+						state={participationState(event, { today, signupsOpen })}
+						{ondetail}
+						{onparticipate}
 					/>
 				{/each}
 			</li>

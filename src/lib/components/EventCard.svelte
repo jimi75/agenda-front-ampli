@@ -7,21 +7,31 @@
 	 *   event: import('#lib/events.js').AgendaEvent,
 	 *   count: number,
 	 *   dateLabel: string,
-	 *   past: boolean,
-	 *   signupsOpen: boolean,
-	 *   onselect: (id: string) => void
+	 *   state: import('#lib/state.js').ParticipationState,
+	 *   ondetail: (id: string) => void,
+	 *   onparticipate: (id: string) => void
 	 * }}
 	 */
-	let { event, count, dateLabel, past, signupsOpen, onselect } = $props();
+	let { event, count, dateLabel, state, ondetail, onparticipate } = $props();
 
-	const cancelled = $derived(event.status === 'cancelled');
-	const canSignup = $derived(signupsOpen && !past && !cancelled);
+	/** Only a plain click opens the detail here; Ctrl, Cmd, Shift and middle click keep the browser's own behaviour. @param {MouseEvent} click */
+	function openDetail(click) {
+		if (click.button !== 0 || click.ctrlKey || click.metaKey || click.shiftKey || click.altKey) return;
+		click.preventDefault();
+		ondetail(event.id);
+	}
 </script>
 
-<article class="event {event.type}" class:past class:cancelled>
+<article class="event {event.type}" class:past={state === 'past'} class:cancelled={state === 'cancelled'}>
 	<p class="tags">
 		<span class="type">{T.types[event.type]}</span>
 		{#if event.status}<span class="status">{T.status[event.status]}</span>{/if}
+		<a
+			class="detail"
+			href="?e={encodeURIComponent(event.id)}"
+			aria-label={T.card.detailLabel(event.name, dateLabel)}
+			onclick={openDetail}>{T.card.detail}</a
+		>
 	</p>
 	<h3 class="name">{event.name}</h3>
 	<p class="time">{formatRange(event.start, event.end)}</p>
@@ -40,12 +50,12 @@
 		<p class="count">{T.count(count)}</p>
 		<button
 			type="button"
-			aria-label={canSignup
+			aria-label={state === 'open'
 				? T.participateLabel(event.name, dateLabel)
 				: T.viewSignupsLabel(event.name, dateLabel)}
-			onclick={() => onselect(event.id)}
+			onclick={() => (state === 'open' ? onparticipate(event.id) : ondetail(event.id))}
 		>
-			{canSignup ? T.participate : T.viewSignups}
+			{state === 'open' ? T.participate : T.viewSignups}
 		</button>
 	</div>
 </article>
@@ -88,6 +98,19 @@
 		letter-spacing: 0.06em;
 		line-height: 1.2;
 		text-transform: uppercase;
+	}
+
+	/* Resets what .tags gives the type label: this is a link in body text. The padding is an invisible touch target. */
+	.detail {
+		margin: -0.3rem -0.25rem -0.3rem auto;
+		padding: 0.3rem 0.25rem;
+		font-size: 1rem;
+		font-weight: 400;
+		letter-spacing: normal;
+		text-transform: none;
+		color: inherit;
+		text-decoration: underline;
+		text-underline-offset: 0.18em;
 	}
 
 	.status {
