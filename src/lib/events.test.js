@@ -6,6 +6,7 @@ import {
 	groupByDate,
 	mapsUrl,
 	normalizeEvents,
+	parseEventParam,
 	parseStatus,
 	parseType
 } from './events.js';
@@ -155,4 +156,19 @@ test('entrada que no és una llista dona 0 esdeveniments', () => {
 test('retalla textos molt llargs i neteja espais', () => {
 	const { events } = normalizeEvents([row({ nom: ` ${'x'.repeat(300)} ` })]);
 	assert.equal(events[0].name.length, 120);
+});
+
+test('parseEventParam: id vàlid, caràcters no vàlids, més de 20 caràcters i sense paràmetre', () => {
+	assert.equal(parseEventParam('?e=paradeta-1'), 'paradeta-1');
+	assert.equal(parseEventParam('?admin&e=a1'), 'a1');
+	assert.equal(parseEventParam('?e=a1&e=b2'), 'a1');
+	assert.equal(parseEventParam('?e='.concat('x'.repeat(20))), 'x'.repeat(20));
+	assert.equal(parseEventParam('?e=Paradeta'), null);
+	assert.equal(parseEventParam('?e=a_1'), null);
+	assert.equal(parseEventParam('?e=a%201'), null);
+	assert.equal(parseEventParam('?e=%3Cb%3E'), null);
+	assert.equal(parseEventParam('?e='.concat('x'.repeat(21))), null);
+	assert.equal(parseEventParam('?e='), null);
+	assert.equal(parseEventParam('?admin'), null);
+	assert.equal(parseEventParam(''), null);
 });

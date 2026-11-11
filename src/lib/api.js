@@ -1,9 +1,13 @@
 import { REQUEST_TIMEOUT_MS, STORAGE_KEY } from './config.js';
+import { addMine } from './my-signups.js';
 
 /**
- * @typedef {{ signupsOpen: boolean, missingColumns: string[], events: unknown[], signups: Map<string, string[]> }} Agenda
+ * @typedef {{
+ *   signupsOpen: boolean, missingColumns: string[], features: string[],
+ *   events: unknown[], signups: Map<string, string[]>
+ * }} Agenda
  * @typedef {Agenda & { staleSince: number | null }} LoadedAgenda
- * @typedef {{ ok: true, names: string[], recovered?: boolean } | { ok: false, error: string }} SignupResult
+ * @typedef {{ ok: true, names: string[], requestId: string, recovered?: boolean } | { ok: false, error: string }} SignupResult
  * @typedef {{ loadAgenda: () => Promise<LoadedAgenda>, signup: (eventId: string, name: string, knownCount: number) => Promise<SignupResult> }} AgendaApi
  */
 
@@ -20,7 +24,9 @@ export function parseAgenda(json) {
 		signups.set(id, Array.isArray(names) ? names.filter(isString) : []);
 	}
 	const missingColumns = Array.isArray(json.missingColumns) ? json.missingColumns.filter(isString) : [];
-	return { signupsOpen: json.signupsOpen !== false, missingColumns, events: json.events, signups };
+	// An older script has no `features`: it supports none of them.
+	const features = Array.isArray(json.features) ? json.features.filter(isString) : [];
+	return { signupsOpen: json.signupsOpen !== false, missingColumns, features, events: json.events, signups };
 }
 
 /** localStorage can throw (private mode, embedded browsers), so every access is guarded. */
@@ -101,35 +107,43 @@ export function createApi({
 		},
 
 		async signup(eventId, name, knownCount) {
-			let json;
-			try {
-				json = await request(url, {
-					method: 'POST',
-					headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-					body: JSON.stringify({ action: 'signup', eventId, name, requestId: uuid() })
-				});
-			} catch {
-				return recover(eventId, name, knownCount);
-			}
-			if (json?.ok === true && Array.isArray(json.names)) {
-				return { ok: true, names: json.names.filter(isString) };
-			}
-			if (json?.ok === false && isString(json.error)) return { ok: false, error: json.error };
-			return recover(eventId, name, knownCount);
+			const requestId = uuid();
+			const result = await send(eventId, name, knownCount, requestId);
+			if (result.ok) addMine(storage, { eventId, requestId, name });
+			return result;
 		}
 	};
+
+	/** @param {string} eventId @param {string} name @param {number} knownCount @param {string} requestId @returns {Promise<SignupResult>} */
+	async function send(eventId, name, knownCount, requestId) {
+		let json;
+		try {
+			json = await request(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+				body: JSON.stringify({ action: 'signup', eventId, name, requestId })
+			});
+		} catch {
+			return recover(eventId, name, knownCount, requestId);
+		}
+		if (json?.ok === true && Array.isArray(json.names)) {
+			return { ok: true, names: json.names.filter(isString), requestId };
+		}
+		if (json?.ok === false && isString(json.error)) return { ok: false, error: json.error };
+		return recover(eventId, name, knownCount, requestId);
+	}
 
 	/**
 	 * The POST may have reached the sheet even though the answer did not come back.
 	 * Never resend blindly: read the list and check whether the name is there.
-	 * @param {string} eventId @param {string} name @param {number} knownCount
+	 * @param {string} eventId @param {string} name @param {number} knownCount @param {string} requestId
 	 * @returns {Promise<SignupResult>}
 	 */
-	async function recover(eventId, name, knownCount) {
+	async function recover(eventId, name, knownCount, requestId) {
 		try {
 			const names = (await fetchAgenda()).signups.get(eventId) ?? [];
 			if (names.length > knownCount && names.includes(name)) {
-				return { ok: true, names, recovered: true };
+				return { ok: true, names, requestId, recovered: true };
 			}
 			return { ok: false, error: 'network' };
 		} catch {

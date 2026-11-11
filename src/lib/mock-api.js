@@ -31,7 +31,7 @@ export function createMockApi({ delay = 250 } = {}) {
 	return {
 		async loadAgenda() {
 			await wait();
-			return { signupsOpen: true, missingColumns: [], events, signups: new Map(signups), staleSince: null };
+			return { signupsOpen: true, missingColumns: [], features: [], events, signups: new Map(signups), staleSince: null };
 		},
 		async signup(eventId, name) {
 			await wait();
@@ -40,7 +40,7 @@ export function createMockApi({ delay = 250 } = {}) {
 			if (!events.some((event) => event.id === eventId)) return { ok: false, error: 'unknown_event' };
 			const names = [...(signups.get(eventId) ?? []), valid.name];
 			signups.set(eventId, names);
-			return { ok: true, names };
+			return { ok: true, names, requestId: globalThis.crypto.randomUUID() };
 		}
 	};
 }

@@ -40,6 +40,44 @@ export const T = {
 		`Veure qui s’ha apuntat a ${name}, ${date}`,
 	dateLabel: (/** @type {number} */ weekday, /** @type {number} */ day) =>
 		`${T.weekdays[weekday]} ${day} de ${MONTH.name}`,
+	card: {
+		detail: 'detall',
+		detailLabel: (/** @type {string} */ name, /** @type {string} */ date) =>
+			`Veure el detall de ${name}, ${date}`,
+		manager: (/** @type {string} */ name) => `Responsable: ${name}`
+	},
+	detail: {
+		close: 'Tanca',
+		participation: 'Participació',
+		listTitle: 'Persones apuntades',
+		listEmpty: 'Encara no s’ha apuntat ningú.',
+		externalNote: 'La inscripció es fa en una web externa.',
+		notFound: 'No s’ha trobat aquesta activitat.'
+	},
+	share: {
+		download: 'Descarrega la imatge',
+		share: 'Comparteix',
+		copyLink: 'Copia l’enllaç',
+		generating: 'Generant…',
+		ready: 'Imatge preparada: prem de nou',
+		copied: 'Enllaç copiat',
+		copyFailed: 'No s’ha pogut copiar. Copia’l a mà:',
+		imageFailed: 'No s’ha pogut generar la imatge. Torna-ho a provar.',
+		fallbackNote:
+			'Aquest navegador no pot compartir la imatge. S’ha descarregat: adjunta-la al missatge.',
+		waLink: 'Obre WhatsApp amb el text',
+		// Placeholder wording from the author.
+		text: (/** @type {string} */ url) => `Apunta’t a l’activitat aquí: ${url}`
+	},
+	participation: {
+		mine: 'La teva participació',
+		unsign: 'Desapuntar-me',
+		unsignConfirm: 'Segur? Prem de nou',
+		unsigning: 'Desapuntant…',
+		unsignDone: 'T’has desapuntat.',
+		alreadyGone: 'Ja no hi eres a la llista.',
+		hint: 'Si vols desapuntar-te, torna a obrir aquesta activitat des d’aquest mateix navegador.'
+	},
 	dialog: {
 		close: 'Tanca',
 		purpose: 'Apunta’t per avisar que hi vindràs.',
@@ -67,6 +105,7 @@ export const T = {
 		network: 'No s’ha pogut enviar. Comprova la connexió i torna-ho a provar.',
 		unconfirmed:
 			'No hem pogut confirmar l’enviament. Recarrega la pàgina i mira la llista abans de tornar-ho a provar.',
-		server: 'Hi ha hagut un error al servidor. Torna-ho a provar d’aquí a un moment.'
+		server: 'Hi ha hagut un error al servidor. Torna-ho a provar d’aquí a un moment.',
+		bad_request: 'No s’ha pogut fer. Recarrega la pàgina i torna-ho a provar.'
 	})
 };

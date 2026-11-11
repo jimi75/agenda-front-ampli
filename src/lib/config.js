@@ -16,3 +16,5 @@ export const MAX_NAME_LENGTH = 30;
 export const REQUEST_TIMEOUT_MS = 15000;
 
 export const STORAGE_KEY = 'agenda-sants-montjuic-2026-11';
+
+export const MY_SIGNUPS_KEY = 'agenda-sants-montjuic-2026-11:mine';

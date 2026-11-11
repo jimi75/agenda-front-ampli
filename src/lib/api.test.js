@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApi, parseAgenda } from './api.js';
+import { readMine } from './my-signups.js';
 
 const agendaJson = (/** @type {Record<string, string[]>} */ signups = {}) => ({
 	ok: true,
@@ -34,6 +35,13 @@ test('parseAgenda valida la forma de la resposta', () => {
 	assert.deepEqual(parseAgenda(agendaJson()).missingColumns, [], 'una resposta antiga sense el camp també val');
 	assert.equal(agenda.signupsOpen, false);
 	assert.deepEqual(agenda.signups.get('a1'), ['Eva', 'Pau']);
+});
+
+test('parseAgenda: features amb i sense el camp (un script antic no en té cap)', () => {
+	assert.deepEqual(parseAgenda(agendaJson()).features, []);
+	assert.deepEqual(parseAgenda({ ...agendaJson(), features: ['unsignup'] }).features, ['unsignup']);
+	assert.deepEqual(parseAgenda({ ...agendaJson(), features: ['unsignup', 3, null] }).features, ['unsignup']);
+	assert.deepEqual(parseAgenda({ ...agendaJson(), features: 'unsignup' }).features, []);
 });
 
 test('loadAgenda: demana ?action=agenda i desa una còpia', async () => {
@@ -126,7 +134,7 @@ test('signup: POST simple (text/plain, sense altres capçaleres) amb requestId',
 		)
 	});
 	const result = await api.signup('a1', 'Pau', 1);
-	assert.deepEqual(result, { ok: true, names: ['Eva', 'Pau'] });
+	assert.deepEqual(result, { ok: true, names: ['Eva', 'Pau'], requestId: 'uuid-1' });
 	assert.equal(sent.method, 'POST');
 	assert.deepEqual(Object.keys(sent.headers), ['Content-Type']);
 	assert.equal(sent.headers['Content-Type'], 'text/plain;charset=utf-8');
@@ -152,6 +160,7 @@ test('signup: si la resposta no arriba però el nom hi és, es dona per bo (sens
 	const api = createApi({
 		url: 'https://example.test/exec',
 		storage: null,
+		uuid: () => 'uuid-2',
 		fetchFn: /** @type {any} */ (
 			async (/** @type {string} */ _url, /** @type {RequestInit} */ init) => {
 				if (init.method === 'POST') {
@@ -165,6 +174,7 @@ test('signup: si la resposta no arriba però el nom hi és, es dona per bo (sens
 	assert.deepEqual(await api.signup('a1', 'Pau', 1), {
 		ok: true,
 		names: ['Eva', 'Pau'],
+		requestId: 'uuid-2',
 		recovered: true
 	});
 	assert.equal(posts, 1);
@@ -191,4 +201,59 @@ test('signup: si la resposta no arriba i el nom no hi és, error de xarxa; si ta
 		})
 	});
 	assert.deepEqual(await offline.signup('a1', 'Pau', 1), { ok: false, error: 'unconfirmed' });
+});
+
+test('signup: desa el registre local només quan hi ha èxit, també per la via de recuperació', async () => {
+	const storage = memoryStorage();
+	const okApi = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		uuid: () => 'uuid-ok',
+		fetchFn: /** @type {any} */ (async () => reply({ ok: true, v: 1, eventId: 'a1', names: ['Pau'] }))
+	});
+	assert.equal((await okApi.signup('a1', 'Pau', 0)).ok, true);
+	assert.deepEqual(readMine(storage), [{ eventId: 'a1', requestId: 'uuid-ok', name: 'Pau' }]);
+
+	const recovered = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		uuid: () => 'uuid-rec',
+		fetchFn: /** @type {any} */ (
+			async (/** @type {string} */ _url, /** @type {RequestInit} */ init) => {
+				if (init.method === 'POST') throw new TypeError('Failed to fetch');
+				return reply(agendaJson({ a1: ['Pau', 'Eva'] }));
+			}
+		)
+	});
+	const result = await recovered.signup('b2', 'Eva', 0);
+	assert.deepEqual(result, { ok: false, error: 'network' }, 'el nom no és a la llista de b2');
+	assert.equal(readMine(storage).length, 1, 'sense èxit no es desa res');
+	const second = await recovered.signup('a1', 'Eva', 1);
+	assert.deepEqual(second, { ok: true, names: ['Pau', 'Eva'], requestId: 'uuid-rec', recovered: true });
+	assert.deepEqual(
+		readMine(storage).map((i) => [i.eventId, i.requestId, i.name]),
+		[
+			['a1', 'uuid-ok', 'Pau'],
+			['a1', 'uuid-rec', 'Eva']
+		]
+	);
+});
+
+test('signup: un error del servidor, de xarxa o sense confirmar no desa cap registre', async () => {
+	const storage = memoryStorage();
+	const server = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		fetchFn: /** @type {any} */ (async () => reply({ ok: false, v: 1, error: 'event_full' }))
+	});
+	assert.deepEqual(await server.signup('a1', 'Pau', 0), { ok: false, error: 'event_full' });
+	const offline = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		fetchFn: /** @type {any} */ (async () => {
+			throw new TypeError('Failed to fetch');
+		})
+	});
+	assert.deepEqual(await offline.signup('a1', 'Pau', 0), { ok: false, error: 'unconfirmed' });
+	assert.deepEqual(readMine(storage), []);
 });

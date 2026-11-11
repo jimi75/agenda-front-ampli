@@ -4,12 +4,13 @@ import { MONTH } from './config.js';
  * @typedef {'accio' | 'acte'} EventType
  * @typedef {{
  *   id: string, date: string, start: string, end: string, type: EventType,
- *   name: string, place: string, mapUrl: string, status: '' | 'cancelled' | 'modified', order: number
+ *   name: string, place: string, mapUrl: string, status: '' | 'cancelled' | 'modified', order: number,
+ *   manager?: string, externalUrl?: string
  * }} AgendaEvent
  * @typedef {{ row: number, reason: string }} SkippedRow
  */
 
-const ID_RE = /^[a-z0-9-]{1,20}$/;
+export const ID_RE = /^[a-z0-9-]{1,20}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TEXT = 120;
@@ -44,6 +45,12 @@ export function mapsUrl(place, custom) {
 	if (/^https:\/\/\S+$/i.test(url)) return url;
 	if (!place) return '';
 	return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+}
+
+/** The event id of a `?e=<id>` link, or null when it is absent or not a valid id. @param {string} search */
+export function parseEventParam(search) {
+	const id = new URLSearchParams(search).get('e');
+	return id !== null && ID_RE.test(id) ? id : null;
 }
 
 /** @param {string} date @param {import('./month.js').MonthRange} month */
