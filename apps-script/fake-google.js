@@ -239,4 +239,6 @@ export function createScript({ events, signups, config = 'SI', now = new Date('2
 }
 
 export const EVENT_HEADER = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
+// A sheet that also has the optional columns J and K, written by hand in J1 and K1.
+export const EVENT_HEADER_OPTIONAL = [...EVENT_HEADER, 'responsable', 'inscripcio_url'];
 export const SIGNUP_HEADER = ['data_hora', 'event_id', 'nom', 'request_id'];

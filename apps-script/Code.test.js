@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createScript, EVENT_HEADER, SIGNUP_HEADER } from './fake-google.js';
+import { createScript, EVENT_HEADER, EVENT_HEADER_OPTIONAL, SIGNUP_HEADER } from './fake-google.js';
 
-const eventRow = (id, extra = {}) => {
-	const base = { id, data: '2026-11-12', inici: '10:00', fi: '14:00', tipus: 'Acció', nom: 'Paradeta', lloc: 'Sants', mapa: '', estat: '' };
-	return EVENT_HEADER.map((key) => ({ ...base, ...extra })[key]);
+const eventRowFor = (header) => (id, extra = {}) => {
+	const base = {
+		id, data: '2026-11-12', inici: '10:00', fi: '14:00', tipus: 'Acció', nom: 'Paradeta', lloc: 'Sants', mapa: '', estat: '',
+		responsable: '', inscripcio_url: ''
+	};
+	return header.map((key) => ({ ...base, ...extra })[key]);
 };
+const eventRow = eventRowFor(EVENT_HEADER);
+const eventRowOptional = eventRowFor(EVENT_HEADER_OPTIONAL);
 
 const setup = (options = {}) =>
 	createScript({
@@ -31,6 +36,44 @@ test('doGet: events, row numbers, sign-ups grouped by event and the open switch'
 	assert.equal(agenda.signupsOpen, true);
 	assert.deepEqual(agenda.events.map((e) => [e.id, e.row, e.data]), [['a1', 2, '2026-11-12'], ['b2', 3, '2026-11-14']]);
 	assert.deepEqual(agenda.signups, { a1: ['Eva'] });
+});
+
+test('doGet: una full d’11 columnes torna responsable i inscripcio_url de cada esdeveniment', () => {
+	const script = setup({
+		events: [
+			EVENT_HEADER_OPTIONAL,
+			eventRowOptional('a1', { responsable: ' Marta ', inscripcio_url: 'https://example.org/inscripcio' }),
+			eventRowOptional('b2', { data: '2026-11-14' })
+		]
+	});
+	const agenda = script.get({ action: 'agenda' });
+	assert.deepEqual(agenda.missingColumns, []);
+	assert.deepEqual(
+		agenda.events.map((e) => [e.id, e.responsable, e.inscripcio_url]),
+		[['a1', 'Marta', 'https://example.org/inscripcio'], ['b2', '', '']]
+	);
+	assert.equal(agenda.events[0].nom, 'Paradeta', 'les columnes de sempre es llegeixen igual');
+	assert.equal('features' in agenda, false, 'features no existeix fins a R4');
+	assert.equal(script.post(request('a1', 'Eva')).ok, true, 'signup funciona amb les columnes noves');
+});
+
+test('doGet: les columnes opcionals es llegeixen per capçalera, també desordenades o si només n’hi ha una', () => {
+	const header = ['inscripcio_url', ...EVENT_HEADER];
+	const row = eventRow('a1', { mapa: 'https://maps.app.goo.gl/x' });
+	const only = setup({ events: [header, ['https://example.org/x', ...row]] }).get({ action: 'agenda' });
+	assert.deepEqual(only.events.map((e) => [e.id, e.mapa, e.inscripcio_url, e.responsable]), [
+		['a1', 'https://maps.app.goo.gl/x', 'https://example.org/x', '']
+	]);
+});
+
+test('doGet: una full de 9 columnes segueix funcionant i els camps nous surten buits', () => {
+	const agenda = setup().get({ action: 'agenda' });
+	assert.equal(agenda.ok, true);
+	assert.deepEqual(agenda.missingColumns, []);
+	assert.deepEqual(
+		agenda.events.map((e) => [e.id, e.responsable, e.inscripcio_url]),
+		[['a1', '', ''], ['b2', '', '']]
+	);
 });
 
 test('doGet: missingColumns avisa de les capçaleres que no es troben (columna renomenada o capçalera desplaçada)', () => {

@@ -1,7 +1,9 @@
 /**
  * Agenda Frontamplista Sants-Montjuïc: backend as a Google Apps Script web app.
  *
- * - doGet  ?action=agenda  -> events + sign-ups as JSON
+ * - doGet  ?action=agenda  -> events + sign-ups as JSON. Each event also carries the optional
+ *   columns `responsable` and `inscripcio_url` (J and K of Esdeveniments; empty when the sheet has
+ *   no such header, so a sheet with only A:I keeps working)
  * - doPost {action:"signup"} (sent as text/plain, see src/lib/api.js) -> adds one sign-up
  *
  * Create it from the sheet (Extensions > Apps Script) so it is bound to that sheet only.
@@ -14,6 +16,8 @@ var SHEET_SIGNUPS = 'Inscripcions';
 var SHEET_CONFIG = 'Config';
 var EVENT_COLUMNS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
 var REQUIRED_EVENT_COLUMNS = ['id', 'data', 'inici', 'tipus', 'nom'];
+// Written by hand in J1 and K1; setup() does not create them.
+var OPTIONAL_EVENT_COLUMNS = ['responsable', 'inscripcio_url'];
 var LOCK_HEADERS = 'Capçalera: no canviar-ne el nom ni la posició (la web la fa servir)';
 var LOCK_LISTS = 'Llistes de dates i hores del desplegable (les crea setup)';
 var SIGNUP_COLUMNS = ['data_hora', 'event_id', 'nom', 'request_id'];
@@ -94,7 +98,7 @@ function readAgenda_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone();
   var eventsSheet = ss.getSheetByName(SHEET_EVENTS);
-  var events = readTable_(eventsSheet, EVENT_COLUMNS, tz);
+  var events = readTable_(eventsSheet, EVENT_COLUMNS.concat(OPTIONAL_EVENT_COLUMNS), tz);
   var rows = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
   var signups = {};
   events.forEach(function (event) {
