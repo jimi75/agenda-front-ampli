@@ -13,6 +13,10 @@ export const T = {
 	noJs: 'Aquesta agenda necessita JavaScript per funcionar.',
 	loading: 'Carregant l’agenda…',
 	empty: 'Encara no hi ha cap activitat programada.',
+	unreadable: 'L’agenda té un problema i ara no es pot mostrar. Torna-ho a provar d’aquí a una estona.',
+	missingColumns: (/** @type {string[]} */ names) =>
+		`A la pestanya Esdeveniments no es troba la capçalera: ${names.join(', ')}. Ha de ser a la fila 1 i escrita exactament així.`,
+	allRowsSkipped: 'Cap fila del full és vàlida, per això no es mostra cap activitat.',
 	loadError: 'No s’ha pogut carregar l’agenda.',
 	loadErrorHelp: 'Comprova la connexió o torna-ho a provar d’aquí a uns minuts.',
 	retry: 'Torna-ho a provar',

@@ -21,6 +21,26 @@ class FakeSheet {
 		this.rows = rows;
 		this.frozenRows = 0;
 		this.validations = [];
+		this.protections = [];
+	}
+
+	#protect(range) {
+		const entry = { range, description: '', warningOnly: false };
+		this.protections.push(entry);
+		const api = {
+			setDescription: (description) => ((entry.description = description), api),
+			setWarningOnly: (warningOnly) => ((entry.warningOnly = warningOnly), api),
+			getDescription: () => entry.description,
+			remove: () => {
+				this.protections = this.protections.filter((p) => p !== entry);
+			}
+		};
+		entry.api = api;
+		return api;
+	}
+
+	getProtections() {
+		return this.protections.map((p) => p.api);
 	}
 
 	#width() {
@@ -52,11 +72,16 @@ class FakeSheet {
 		if (typeof a === 'string') {
 			const match = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(a);
 			if (!match) {
-				return { setNumberFormat() {}, setDataValidation: (rule) => this.validations.push([a, rule]) };
+				return {
+					setNumberFormat() {},
+					setDataValidation: (rule) => this.validations.push([a, rule]),
+					protect: () => this.#protect(a)
+				};
 			}
 			const col = match[1].charCodeAt(0) - 65;
 			const row = Number(match[2]) - 1;
 			return {
+				protect: () => this.#protect(a),
 				getDisplayValue: () => display(this.rows[row]?.[col]),
 				setValues: (values) => {
 					this.rows[row] ??= [];
@@ -150,6 +175,7 @@ export function createScript({ events, signups, config = 'SI', now = new Date('2
 		SpreadsheetApp: {
 			getActiveSpreadsheet: () => spreadsheet,
 			flush() {},
+			ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
 			newDataValidation: () => chain(state.validationCalls)
 		},
 		LockService: {

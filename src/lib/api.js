@@ -1,7 +1,7 @@
 import { REQUEST_TIMEOUT_MS, STORAGE_KEY } from './config.js';
 
 /**
- * @typedef {{ signupsOpen: boolean, events: unknown[], signups: Map<string, string[]> }} Agenda
+ * @typedef {{ signupsOpen: boolean, missingColumns: string[], events: unknown[], signups: Map<string, string[]> }} Agenda
  * @typedef {Agenda & { staleSince: number | null }} LoadedAgenda
  * @typedef {{ ok: true, names: string[], recovered?: boolean } | { ok: false, error: string }} SignupResult
  * @typedef {{ loadAgenda: () => Promise<LoadedAgenda>, signup: (eventId: string, name: string, knownCount: number) => Promise<SignupResult> }} AgendaApi
@@ -19,7 +19,8 @@ export function parseAgenda(json) {
 	for (const [id, names] of Object.entries(source)) {
 		signups.set(id, Array.isArray(names) ? names.filter(isString) : []);
 	}
-	return { signupsOpen: json.signupsOpen !== false, events: json.events, signups };
+	const missingColumns = Array.isArray(json.missingColumns) ? json.missingColumns.filter(isString) : [];
+	return { signupsOpen: json.signupsOpen !== false, missingColumns, events: json.events, signups };
 }
 
 /** localStorage can throw (private mode, embedded browsers), so every access is guarded. */

@@ -31,7 +31,7 @@ export function createMockApi({ delay = 250 } = {}) {
 	return {
 		async loadAgenda() {
 			await wait();
-			return { signupsOpen: true, events, signups: new Map(signups), staleSince: null };
+			return { signupsOpen: true, missingColumns: [], events, signups: new Map(signups), staleSince: null };
 		},
 		async signup(eventId, name) {
 			await wait();

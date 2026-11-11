@@ -101,12 +101,12 @@ export function normalizeEvents(rows, month = MONTH) {
 		let reason = '';
 		if (!ID_RE.test(id)) reason = 'id no vàlid';
 		else if (seen.has(id)) reason = 'id repetit';
+		else if (!date) reason = 'falta la data';
 		else if (!isDateInMonth(date, month)) {
 			const from = month.firstDay ?? 1;
 			const to = month.lastDay ?? 31;
 			reason = `data fora de l’agenda (del ${from} al ${to}) o amb format incorrecte`;
-		}
-		else if (!TIME_RE.test(start)) reason = 'hora d’inici no vàlida';
+		} else if (!TIME_RE.test(start)) reason = 'hora d’inici no vàlida';
 		else if (!name) reason = 'falta el nom';
 		if (reason) {
 			skipped.push({ row, reason });

@@ -33,6 +33,25 @@ test('doGet: events, row numbers, sign-ups grouped by event and the open switch'
 	assert.deepEqual(agenda.signups, { a1: ['Eva'] });
 });
 
+test('doGet: missingColumns avisa de les capçaleres que no es troben (columna renomenada o capçalera desplaçada)', () => {
+	const ok = setup().get({ action: 'agenda' });
+	assert.deepEqual(ok.missingColumns, []);
+
+	const renamed = EVENT_HEADER.map((h) => (h === 'data' ? 'fecha' : h));
+	const script = setup({ events: [renamed, eventRow('a1')] });
+	const agenda = script.get({ action: 'agenda' });
+	assert.deepEqual(agenda.missingColumns, ['data']);
+	assert.equal(agenda.events[0].data, '', 'sense la capçalera «data» la data surt buida');
+	assert.equal(agenda.events[0].nom, 'Paradeta', 'la resta de columnes es llegeixen igualment');
+
+	// Header sorted into the middle of the data: row 1 is now an event, not the header.
+	const sorted = setup({ events: [eventRow('a1'), EVENT_HEADER] });
+	assert.deepEqual(sorted.get({ action: 'agenda' }).missingColumns, ['id', 'data', 'inici', 'tipus', 'nom']);
+
+	const noTab = createScript({ signups: [SIGNUP_HEADER] });
+	assert.equal(noTab.get({ action: 'agenda' }).missingColumns.length, 5);
+});
+
 test('doGet: sign-ups of events that do not exist are not published', () => {
 	const script = setup({ signups: [SIGNUP_HEADER, ['x', 'ghost', 'Fantasma', 'req-00000009']] });
 	assert.deepEqual(script.get({ action: 'agenda' }).signups, {});
@@ -191,12 +210,30 @@ test('setup(): validations are drop-down lists only (no locale-dependent formula
 	assert.equal(dates.at(-1), '2026-11-29');
 	assert.ok(!dates.includes('2026-11-01') && !dates.includes('2026-11-30'));
 	assert.equal(times[0], 'hores_valides');
-	assert.equal(times[1], '06:00');
-	assert.equal(times.at(-1), '23:55');
-	assert.equal(times.length, 1 + (24 - 6) * 12);
+	assert.equal(times[1], '08:00');
+	assert.equal(times.at(-1), '22:00');
+	assert.equal(times.length, 1 + 14 * 12 + 1, 'de 08:00 a 22:00 inclosos, de 5 en 5 minuts');
 	assert.ok([...dates.slice(1), ...times.slice(1)].every((v) => typeof v === 'string'));
 	assert.ok(times.slice(1).every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)));
 	assert.equal(config[0][1], 'SI', 'the open/closed switch is not touched by the lists');
+});
+
+test('setup(): una nova execució esborra les hores sobrants d’una llista anterior més llarga (06:00–23:55)', () => {
+	const script = createScript({ config: null });
+	script.context.setup();
+	const config = script.sheets.get('Config').rows;
+	// Previous version: 216 times from 06:00 to 23:55, i.e. column F up to row 217.
+	for (let row = 1; row <= 216; row++) {
+		config[row] = config[row] ?? [];
+		config[row][5] = `old-${row}`;
+	}
+	script.context.setup();
+	const times = config.map((row) => row?.[5]).filter((v) => v !== undefined && v !== '');
+	assert.equal(times.length, 170);
+	assert.equal(times[1], '08:00');
+	assert.equal(times.at(-1), '22:00');
+	assert.ok(times.slice(1).every((t) => t >= '08:00' && t <= '22:00' && Number(t.slice(3)) % 5 === 0));
+	assert.ok(!times.some((t) => t.startsWith('old-')));
 });
 
 test('setup(): una nova execució esborra les dates sobrants d’una llista anterior més llarga', () => {
@@ -216,6 +253,31 @@ test('setup(): una nova execució esborra les dates sobrants d’una llista ante
 	assert.ok(config[30]?.[4] === undefined || config[30][4] === '');
 });
 
+test('setup(): protege les capçaleres amb avís de confirmació (no bloqueig dur) i no apila duplicats', () => {
+	const script = createScript({ config: null });
+	script.context.setup();
+	const summary = () =>
+		['Esdeveniments', 'Inscripcions', 'Config'].map((name) =>
+			script.sheets.get(name).protections.map((p) => [p.range, p.warningOnly, p.api.getDescription().slice(0, 9)])
+		);
+	assert.deepEqual(summary(), [
+		[['A1:I1', true, 'Capçalera']],
+		[['A1:D1', true, 'Capçalera']],
+		[['E1:F170', true, 'Llistes d']]
+	]);
+
+	script.context.setup();
+	script.context.setup();
+	assert.deepEqual(summary().map((list) => list.length), [1, 1, 1], 'tres execucions, una sola protecció per rang');
+
+	// A protection that the owner added by hand (different description) is left alone.
+	script.sheets.get('Esdeveniments').getRange('K1').protect().setDescription('meva');
+	script.context.setup();
+	assert.equal(script.sheets.get('Esdeveniments').protections.length, 2);
+	// The switch Config!B1 stays editable: it is outside the protected range E1:F170.
+	assert.ok(!script.sheets.get('Config').protections.some((p) => p.range.startsWith('A') || p.range.startsWith('B')));
+});
+
 test('setup(): creates the three tabs with headers and never overwrites existing data', () => {
 	const script = createScript({ config: null });
 	script.context.setup();
@@ -223,6 +285,11 @@ test('setup(): creates the three tabs with headers and never overwrites existing
 	assert.deepEqual(script.sheets.get('Inscripcions').rows[0], SIGNUP_HEADER);
 	assert.equal(script.sheets.get('Config').rows[0][1], 'SI');
 	assert.equal(script.sheets.get('Esdeveniments').frozenRows, 1);
+	assert.equal(script.sheets.get('Inscripcions').frozenRows, 1);
+
+	script.sheets.get('Esdeveniments').frozenRows = 0;
+	script.context.setup();
+	assert.equal(script.sheets.get('Esdeveniments').frozenRows, 1, 'setup torna a fixar la capçalera');
 
 	script.sheets.get('Esdeveniments').rows.push(eventRow('a1'));
 	script.sheets.get('Config').rows[0][1] = 'NO';

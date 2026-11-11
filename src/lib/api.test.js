@@ -27,8 +27,11 @@ test('parseAgenda valida la forma de la resposta', () => {
 	assert.throws(() => parseAgenda({ ok: true, v: 1 }));
 	const agenda = parseAgenda({
 		...agendaJson({ a1: /** @type {any} */ (['Eva', 5, 'Pau']) }),
-		signupsOpen: false
+		signupsOpen: false,
+		missingColumns: ['data', 7]
 	});
+	assert.deepEqual(agenda.missingColumns, ['data']);
+	assert.deepEqual(parseAgenda(agendaJson()).missingColumns, [], 'una resposta antiga sense el camp també val');
 	assert.equal(agenda.signupsOpen, false);
 	assert.deepEqual(agenda.signups.get('a1'), ['Eva', 'Pau']);
 });

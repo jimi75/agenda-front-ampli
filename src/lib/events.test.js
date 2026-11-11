@@ -134,6 +134,19 @@ test('només s’accepten els dies de l’agenda (del 2 al 29 de novembre): l’
 	assert.match(skipped[0].reason, /fora de l’agenda \(del 2 al 29\)/);
 });
 
+test('una data buida té el seu propi motiu (falta la data), diferent d’una data fora de rang', () => {
+	const { events, skipped } = normalizeEvents([
+		row({ id: 'a', data: '' }),
+		row({ id: 'b', data: '2026-12-01' }),
+		row({ id: 'c', data: /** @type {any} */ (undefined) })
+	]);
+	assert.equal(events.length, 0);
+	assert.deepEqual(
+		skipped.map((s) => s.reason),
+		['falta la data', 'data fora de l’agenda (del 2 al 29) o amb format incorrecte', 'falta la data']
+	);
+});
+
 test('entrada que no és una llista dona 0 esdeveniments', () => {
 	assert.deepEqual(normalizeEvents(null), { events: [], skipped: [] });
 	assert.deepEqual(normalizeEvents('x'), { events: [], skipped: [] });

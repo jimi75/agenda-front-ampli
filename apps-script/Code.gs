@@ -13,11 +13,17 @@ var SHEET_EVENTS = 'Esdeveniments';
 var SHEET_SIGNUPS = 'Inscripcions';
 var SHEET_CONFIG = 'Config';
 var EVENT_COLUMNS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
+var REQUIRED_EVENT_COLUMNS = ['id', 'data', 'inici', 'tipus', 'nom'];
+var LOCK_HEADERS = 'Capçalera: no canviar-ne el nom ni la posició (la web la fa servir)';
+var LOCK_LISTS = 'Llistes de dates i hores del desplegable (les crea setup)';
 var SIGNUP_COLUMNS = ['data_hora', 'event_id', 'nom', 'request_id'];
 var COLUMN_KIND = { data: 'date', inici: 'time', fi: 'time' };
 // Days of November 2026 shown by the agenda (Monday 2 to Sunday 29). Same as src/lib/config.js.
 var FIRST_DAY = 2;
 var LAST_DAY = 29;
+// Times offered in the drop-downs of inici and fi, in minutes since 00:00 (08:00 to 22:00).
+var FIRST_TIME = 8 * 60;
+var LAST_TIME = 22 * 60;
 var MAX_SIGNUPS_PER_EVENT = 150;
 var MAX_SIGNUPS_TOTAL = 3000;
 var LOCK_WAIT_MS = 10000;
@@ -87,14 +93,33 @@ function doPost(e) {
 function readAgenda_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone();
-  var events = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz);
+  var eventsSheet = ss.getSheetByName(SHEET_EVENTS);
+  var events = readTable_(eventsSheet, EVENT_COLUMNS, tz);
   var rows = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
   var signups = {};
   events.forEach(function (event) {
     var names = namesFor_(rows, event.id);
     if (names.length) signups[event.id] = names;
   });
-  return { ok: true, v: API_VERSION, signupsOpen: isOpen_(ss), events: events, signups: signups };
+  return {
+    ok: true,
+    v: API_VERSION,
+    signupsOpen: isOpen_(ss),
+    // Headers of Esdeveniments that were not found (renamed, deleted or moved out of row 1).
+    missingColumns: missingColumns_(eventsSheet, REQUIRED_EVENT_COLUMNS),
+    events: events,
+    signups: signups
+  };
+}
+
+function missingColumns_(sheet, required) {
+  var header = sheet ? sheet.getDataRange().getDisplayValues()[0] || [] : [];
+  var names = header.map(function (name) {
+    return String(name).trim().toLowerCase();
+  });
+  return required.filter(function (column) {
+    return names.indexOf(column) === -1;
+  });
 }
 
 function namesFor_(signupRows, eventId) {
@@ -189,8 +214,9 @@ function fail_(error) {
 
 /**
  * Run once from the Apps Script editor (select "setup" > Run). It creates the three tabs
- * with their headers, plain-text columns and drop-down lists. It never overwrites events,
- * sign-ups or the open/closed switch, so running it again is safe (it rebuilds the lists).
+ * with their headers, plain-text columns, drop-down lists and a confirmation warning on the
+ * headers. It never overwrites events, sign-ups or the open/closed switch, so running it
+ * again is safe (it rebuilds the lists and the protections).
  */
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -207,6 +233,8 @@ function setup() {
   writeList_(config, 6, 'hores_valides', times);
 
   var events = ensureSheet_(ss, SHEET_EVENTS, EVENT_COLUMNS);
+  // Frozen header: "Data > Sort sheet" leaves a frozen row 1 in place instead of sorting it with the events.
+  events.setFrozenRows(1);
   events.getRange('A:I').setNumberFormat('@');
   var rules = [
     ['E2:E', SpreadsheetApp.newDataValidation().requireValueInList(['Acció', 'Acte'], true)],
@@ -219,7 +247,25 @@ function setup() {
   });
 
   var signups = ensureSheet_(ss, SHEET_SIGNUPS, SIGNUP_COLUMNS);
+  signups.setFrozenRows(1);
   signups.getRange('A:D').setNumberFormat('@');
+
+  // Warning-only protection: the owner is the only editor, so a hard lock would not stop an
+  // accidental edit. Sheets asks for confirmation before changing a protected cell.
+  lockRange_(events, 'A1:I1', LOCK_HEADERS);
+  lockRange_(signups, 'A1:D1', LOCK_HEADERS);
+  lockRange_(config, 'E1:F' + (times.length + 1), LOCK_LISTS);
+}
+
+/**
+ * Protects a range with a confirmation warning. It removes the protection this function created
+ * before (matched by description), so running setup again never stacks duplicates.
+ */
+function lockRange_(sheet, a1, description) {
+  sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE).forEach(function (protection) {
+    if (protection.getDescription() === description) protection.remove();
+  });
+  sheet.getRange(a1).protect().setDescription(description).setWarningOnly(true);
 }
 
 /** The days shown by the agenda, as YYYY-MM-DD. */
@@ -229,10 +275,10 @@ function validDates_() {
   return dates;
 }
 
-/** 06:00 to 23:55 in steps of 5 minutes, as HH:MM. */
+/** Allowed start and end times, as HH:MM in steps of 5 minutes (first and last included). */
 function validTimes_() {
   var times = [];
-  for (var minutes = 6 * 60; minutes < 24 * 60; minutes += 5) {
+  for (var minutes = FIRST_TIME; minutes <= LAST_TIME; minutes += 5) {
     var h = Math.floor(minutes / 60);
     var m = minutes % 60;
     times.push((h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m);

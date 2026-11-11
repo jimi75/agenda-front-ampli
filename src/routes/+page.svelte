@@ -17,6 +17,7 @@
 	 * @typedef {{
 	 *   events: import('#lib/events.js').AgendaEvent[],
 	 *   skipped: import('#lib/events.js').SkippedRow[],
+	 *   missingColumns: string[],
 	 *   signups: Map<string, string[]>,
 	 *   signupsOpen: boolean,
 	 *   staleSince: number | null
@@ -52,14 +53,22 @@
 	const staleMinutes = $derived(
 		data?.staleSince ? Math.max(0, Math.round((Date.now() - data.staleSince) / 60_000)) : 0
 	);
+	// The sheet has rows but none can be read: an empty calendar would read as "no events".
+	const unreadable = $derived(
+		!!data &&
+			data.events.length === 0 &&
+			(data.missingColumns.length > 0 || data.skipped.length > 0)
+	);
 
 	/** @param {import('#lib/api.js').LoadedAgenda} agenda */
 	function apply(agenda) {
 		const { events, skipped } = normalizeEvents(agenda.events);
 		if (skipped.length) console.warn('Agenda: files ignorades', skipped);
+		if (agenda.missingColumns.length) console.warn('Agenda: falten capçaleres', agenda.missingColumns);
 		data = {
 			events,
 			skipped,
+			missingColumns: agenda.missingColumns,
 			signups: agenda.signups,
 			signupsOpen: agenda.signupsOpen,
 			staleSince: agenda.staleSince
@@ -148,24 +157,35 @@
 			<p>{T.loadErrorHelp}</p>
 			<button type="button" onclick={() => load()}>{T.retry}</button>
 		</div>
+	{:else if unreadable}
+		<div class="notice error" role="alert">
+			<p><strong>{T.unreadable}</strong></p>
+			<button type="button" onclick={() => load()}>{T.retry}</button>
+		</div>
 	{/if}
 
 	{#if data && data.staleSince !== null}
 		<p class="notice" role="status">{T.staleData(staleMinutes)}</p>
 	{/if}
 
-	{#if showAdmin && data && data.skipped.length}
+	{#if showAdmin && data && (data.skipped.length || data.missingColumns.length)}
 		<div class="notice">
-			<p><strong>{T.skippedWarning(data.skipped.length)}</strong></p>
-			<ul>
-				{#each data.skipped as row (row.row)}
-					<li>Fila {row.row}: {row.reason}</li>
-				{/each}
-			</ul>
+			{#if data.missingColumns.length}
+				<p><strong>{T.missingColumns(data.missingColumns)}</strong></p>
+			{/if}
+			{#if unreadable}<p>{T.allRowsSkipped}</p>{/if}
+			{#if data.skipped.length}
+				<p><strong>{T.skippedWarning(data.skipped.length)}</strong></p>
+				<ul>
+					{#each data.skipped as row (row.row)}
+						<li>Fila {row.row}: {row.reason}</li>
+					{/each}
+				</ul>
+			{/if}
 		</div>
 	{/if}
 
-	{#if status !== 'error'}
+	{#if status !== 'error' && !unreadable}
 		<Calendar
 			{month}
 			{byDate}
