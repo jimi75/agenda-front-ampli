@@ -13,6 +13,8 @@ export const TIME_ZONE = 'Europe/Madrid';
 
 export const MAX_NAME_LENGTH = 30;
 
+export const MAX_MANAGER_LENGTH = 60;
+
 export const REQUEST_TIMEOUT_MS = 15000;
 
 export const STORAGE_KEY = 'agenda-sants-montjuic-2026-11';

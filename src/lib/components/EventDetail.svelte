@@ -88,6 +88,9 @@
 						{/if}
 					</p>
 				{/if}
+				{#if event.manager}
+					<p class="manager">{T.card.manager(event.manager)}</p>
+				{/if}
 
 				<section>
 					<h3>{T.detail.participation}</h3>
@@ -96,6 +99,11 @@
 						<button type="button" class="primary" onclick={() => onparticipate(event.id)}>
 							{T.participate}
 						</button>
+					{:else if participation === 'external'}
+						<a class="primary" href={event.externalUrl} target="_blank" rel="noopener noreferrer"
+							>{T.participate}<span class="sr-only"> {T.newTab}</span></a
+						>
+						<p class="note">{T.detail.externalNote}</p>
 					{:else if participation === 'closed'}
 						<p class="note">{T.dialog.closed}</p>
 					{:else if participation === 'past'}
@@ -263,6 +271,12 @@
 		text-underline-offset: 0.18em;
 	}
 
+	.manager {
+		margin: 0.4rem 0 0;
+		color: var(--rust);
+		overflow-wrap: anywhere;
+	}
+
 	.close {
 		flex: none;
 		min-width: 44px;
@@ -298,6 +312,8 @@
 	}
 
 	.primary {
+		display: inline-flex;
+		align-items: center;
 		min-height: 48px;
 		padding: 0 1.2rem;
 		border: 0;
@@ -305,7 +321,12 @@
 		background: var(--rust);
 		color: var(--lime);
 		font: 700 1.05rem/1 var(--font-text);
+		text-decoration: none;
 		cursor: pointer;
+	}
+
+	.primary + .note {
+		margin-top: 0.6rem;
 	}
 
 	.note,

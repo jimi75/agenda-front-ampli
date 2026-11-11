@@ -1,11 +1,11 @@
-import { MONTH } from './config.js';
+import { MAX_MANAGER_LENGTH, MONTH } from './config.js';
 
 /**
  * @typedef {'accio' | 'acte'} EventType
  * @typedef {{
  *   id: string, date: string, start: string, end: string, type: EventType,
  *   name: string, place: string, mapUrl: string, status: '' | 'cancelled' | 'modified', order: number,
- *   manager?: string, externalUrl?: string
+ *   manager: string, externalUrl: string
  * }} AgendaEvent
  * @typedef {{ row: number, reason: string }} SkippedRow
  */
@@ -39,10 +39,16 @@ export function parseStatus(value) {
 	return '';
 }
 
+/** The value when it is an https:// link without spaces, and an empty string otherwise. @param {unknown} value */
+export function httpsUrl(value) {
+	const url = plain(value);
+	return /^https:\/\/\S+$/i.test(url) ? url : '';
+}
+
 /** @param {string} place @param {unknown} custom */
 export function mapsUrl(place, custom) {
-	const url = plain(custom);
-	if (/^https:\/\/\S+$/i.test(url)) return url;
+	const url = httpsUrl(custom);
+	if (url) return url;
 	if (!place) return '';
 	return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 }
@@ -134,7 +140,9 @@ export function normalizeEvents(rows, month = MONTH) {
 			place,
 			mapUrl: mapsUrl(place, r.mapa),
 			status: parseStatus(r.estat),
-			order: index
+			order: index,
+			manager: plain(r.responsable).slice(0, MAX_MANAGER_LENGTH),
+			externalUrl: httpsUrl(r.inscripcio_url)
 		});
 	});
 

@@ -1,6 +1,6 @@
 // The Google script, running inside the test: the real apps-script/Code.gs against a fake sheet,
 // answering the browser's requests to the script URL. No second server and no control endpoints.
-import { createScript, EVENT_HEADER, SIGNUP_HEADER } from '../apps-script/fake-google.js';
+import { createScript, EVENT_HEADER_OPTIONAL, SIGNUP_HEADER } from '../apps-script/fake-google.js';
 
 export const SCRIPT_URL = 'http://localhost:5301/exec';
 
@@ -15,15 +15,18 @@ const eventRow = (id, extra = {}) => {
 		nom: 'Paradeta',
 		lloc: 'Mercat de Sants',
 		mapa: '',
-		estat: ''
+		estat: '',
+		responsable: '',
+		inscripcio_url: ''
 	};
 	const row = /** @type {Record<string, string>} */ ({ ...base, ...extra });
-	return EVENT_HEADER.map((key) => row[key]);
+	return EVENT_HEADER_OPTIONAL.map((key) => row[key]);
 };
 
-// With "today" fixed at 10 November: two open events, a cancelled one and a past one.
+// With "today" fixed at 10 November: two open events, a cancelled one, a past one,
+// one with a manager and one that signs up on an external web.
 const seedEvents = () => [
-	EVENT_HEADER,
+	EVENT_HEADER_OPTIONAL,
 	eventRow('accio-1', { nom: 'Paradeta al mercat' }),
 	eventRow('acte-1', {
 		tipus: 'Acte',
@@ -34,7 +37,13 @@ const seedEvents = () => [
 		lloc: 'Centre Cívic Cotxeres de Sants'
 	}),
 	eventRow('cancel-1', { data: '2026-11-16', estat: 'Cancel·lat', nom: 'Assemblea del districte' }),
-	eventRow('pasat-1', { data: '2026-11-05', nom: 'Repartiment de fulletons' })
+	eventRow('pasat-1', { data: '2026-11-05', nom: 'Repartiment de fulletons' }),
+	eventRow('resp-1', { data: '2026-11-18', nom: 'Enganxada de cartells', responsable: 'Marta' }),
+	eventRow('ext-1', {
+		data: '2026-11-19',
+		nom: 'Jornada amb inscripció externa',
+		inscripcio_url: 'https://example.org/inscripcio'
+	})
 ];
 
 /**

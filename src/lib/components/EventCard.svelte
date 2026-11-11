@@ -46,17 +46,30 @@
 			{/if}
 		</p>
 	{/if}
+	{#if event.manager}
+		<p class="manager">{T.card.manager(event.manager)}</p>
+	{/if}
 	<div class="actions">
-		<p class="count">{T.count(count)}</p>
-		<button
-			type="button"
-			aria-label={state === 'open'
-				? T.participateLabel(event.name, dateLabel)
-				: T.viewSignupsLabel(event.name, dateLabel)}
-			onclick={() => (state === 'open' ? onparticipate(event.id) : ondetail(event.id))}
-		>
-			{state === 'open' ? T.participate : T.viewSignups}
-		</button>
+		{#if state === 'external'}
+			<a
+				class="button"
+				href={event.externalUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				aria-label="{T.participateLabel(event.name, dateLabel)} {T.newTab}">{T.participate}</a
+			>
+		{:else}
+			<p class="count">{T.count(count)}</p>
+			<button
+				type="button"
+				aria-label={state === 'open'
+					? T.participateLabel(event.name, dateLabel)
+					: T.viewSignupsLabel(event.name, dateLabel)}
+				onclick={() => (state === 'open' ? onparticipate(event.id) : ondetail(event.id))}
+			>
+				{state === 'open' ? T.participate : T.viewSignups}
+			</button>
+		{/if}
 	</div>
 </article>
 
@@ -158,6 +171,13 @@
 		text-underline-offset: 0.18em;
 	}
 
+	.manager {
+		margin: 0.1rem 0 0;
+		font-size: 0.9rem;
+		line-height: 1.2;
+		overflow-wrap: anywhere;
+	}
+
 	.actions {
 		display: flex;
 		flex-wrap: wrap;
@@ -173,7 +193,10 @@
 		font-weight: 600;
 	}
 
-	button {
+	button,
+	.button {
+		display: inline-flex;
+		align-items: center;
 		min-height: 44px;
 		padding: 0 0.95rem;
 		border: 0;
@@ -181,6 +204,7 @@
 		background: var(--badge-bg);
 		color: var(--badge-fg);
 		font: 700 0.95rem/1 var(--font-text);
+		text-decoration: none;
 		cursor: pointer;
 	}
 
@@ -202,7 +226,8 @@
 			font-size: 1rem;
 		}
 
-		button {
+		button,
+		.button {
 			padding: 0 0.6rem;
 			font-size: 0.85rem;
 		}

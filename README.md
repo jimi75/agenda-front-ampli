@@ -7,6 +7,7 @@ Web estática, en catalán, con las acciones y actos de **noviembre de 2026** de
 - Dos tipos: **Accions** (tarjeta lima) y **Actes** (tarjeta rojiza). Cada tarjeta lleva el nombre del tipo escrito, no solo el color.
 - Cada tarjeta tiene un enlace **detall** (arriba a la derecha, en la línea del tipo) que abre el detalle del evento: a pantalla completa en móvil y como panel centrado desde 1024 px. Muestra tipo, nombre, fecha y hora, lugar con enlace a Google Maps, recuento y lista de apuntados. Tocar la tarjeta en otro sitio no hace nada.
 - Cada evento abierto tiene botón **Participar**: abre un modal pequeño con el formulario (solo nombre o apodo). La tarjeta y el detalle muestran el recuento; la lista de apuntados está en el detalle. En un evento pasado, cancelado o con las inscripciones cerradas, la tarjeta ofrece **Veure apuntats**, que abre el detalle en solo lectura.
+- Dos columnas opcionales de la hoja: `responsable` (se muestra en la tarjeta y en el detalle como «Responsable: …») e `inscripcio_url` (si un evento se inscribe en otra web, **Participar** es un enlace que la abre en una pestaña nueva y la tarjeta y el detalle no muestran recuento ni lista de ese evento). Ver *Editar los eventos*.
 - Enlace directo a un evento: `…/agenda-front-ampli/?e=<id>` abre su detalle al cargar. Desde el detalle, **Comparteix** abre WhatsApp con un texto y ese enlace, y **Copia l’enllaç** lo copia. Abrir o cerrar el detalle no cambia la barra de direcciones: el enlace se construye siempre con el `id` del evento.
 - Tipografía: Special Gothic (la de frenteamplio.info). Impact no se usa: es comercial y no está instalada en Android.
 
@@ -68,6 +69,12 @@ Después, desde el móvil **con datos móviles** (no Wi-Fi) y desde el navegador
 2. **Botón Atrás en Android.** Con el detalle abierto, pulsa Atrás. No hay resultado «correcto»: depende del navegador (ver *Decisiones y límites*). **Anótalo** en la línea *Resultado en Android* de *Botón Atrás en Android*.
 3. **Spike S3: `localStorage` en el navegador interno de WhatsApp** (decide si se construye la baja de inscripción, R4). Abre desde un chat `https://jimi75.github.io/agenda-front-ampli/?admin&e=ID_DE_UN_EVENTO`: el panel de `?admin` muestra `local signups: 0`. Pulsa *Participar* y apúntate como `Prova`: debe pasar a `local signups: 1`. Cierra el navegador interno y vuelve a abrir el mismo enlace desde WhatsApp. Si sigue en `local signups: 1`, `localStorage` se conserva; si vuelve a 0, no. **Anótalo** en la línea *Resultado* de *Navegador interno de WhatsApp (S3)*. Borra después la fila `Prova` de la hoja. La parte de S3 sobre descargar un archivo no se puede probar todavía: no hay ningún archivo que descargar hasta que exista la imagen (R3).
 
+**Entrega del responsable y la URL externa (R2).** Tras desplegar el script y escribir J1 y K1 (ver *Cómo publicar una entrega*), con la misma variable `URL` de arriba:
+
+1. **Lectura.** `curl -sL "$URL?action=agenda" | head -c 800`: cada evento de `events` debe traer `"responsable"` e `"inscripcio_url"` (con `""` si la celda está vacía) y la respuesta **no** debe traer `features` (llega con R4). Si no salen, el script de la implementación no es el de R2: revisa que la implementación use la versión nueva.
+2. **Latencia de `doGet`** (una vez). `curl -sL -o /dev/null -w '%{time_total}\n' "$URL?action=agenda"`. Si pasa de 3 s, hay que añadir una caché de `CacheService` de 30 s en el script (decisión del diseño; hasta entonces no hay caché). **Anótalo** en la línea *Resultado* de *Latencia de `doGet` (R2)*.
+3. **Datos de prueba en la hoja.** En una fila de prueba pon `Prova` en `responsable` y `https://example.org` en `inscripcio_url`. Recarga la web: la tarjeta muestra «Responsable: Prova», su **Participar** abre `example.org` en una pestaña nueva, no abre el modal y no hay recuento ni lista. Pon `Config!B1` en `NO` y comprueba que el enlace sigue funcionando; devuélvelo a `SI`. Borra la fila de prueba.
+
 ## Editar los eventos
 
 Pestaña **`Esdeveniments`**, una fila por evento. Las columnas se leen por el nombre de la cabecera, así que puedes reordenarlas.
@@ -91,6 +98,15 @@ Recarga la URL `/exec?action=agenda`: el evento debe aparecer en `events` con `"
 | `lloc` | no | `Plaça de Sants, Barcelona` | Se muestra y se enlaza a Google Maps (búsqueda por este texto). |
 | `mapa` | no | `https://maps.app.goo.gl/...` | Si lo pones (debe empezar por `https://`), se usa este enlace en vez de la búsqueda. |
 | `estat` | no | `Cancel·lat` / `Modificat` | Muestra la etiqueta en la tarjeta. Un evento cancelado no admite más inscripciones. |
+| `responsable` | no (columna J) | `Marta` | Solo un nombre: se muestra como «Responsable: Marta» en la tarjeta y en el detalle, hasta 60 caracteres. No pongas teléfonos: la web es pública. |
+| `inscripcio_url` | no (columna K) | `https://example.org/inscripcio` | Si el evento se inscribe en otra web. Solo `https://` y sin espacios (misma regla que `mapa`; si no es válida se trata como vacía). **Participar** abre esa web en una pestaña nueva, también con las inscripciones cerradas (`Config!B1` = `NO`), y la tarjeta y el detalle no muestran recuento ni lista. Un evento pasado o cancelado sigue siendo solo lectura, con su recuento y su lista. |
+
+**Las columnas J y K no las crea `setup`** (la hoja sigue siendo A:I). Escribe a mano las cabeceras `responsable` en **J1** e `inscripcio_url` en **K1** (exactamente así, en minúsculas) y haz esto una vez:
+
+1. Selecciona las columnas J:K → **Formato → Número → Texto sin formato**, para que Sheets no convierta ni evalúe lo que se escriba.
+2. **Datos → Proteger hojas y rangos → Añadir hoja o rango**, rango `Esdeveniments!J1:K1` → **Establecer permisos → Mostrar un aviso al editar este rango**, como la protección de `A1:I1`.
+
+Si faltan J1 y K1, la agenda funciona igual y esos campos salen vacíos. Si los escribes, hazlo según el orden de *Cómo publicar una entrega*.
 
 - Si una fila está mal (id repetido, fecha fuera del 2 al 29 de noviembre, hora inválida), **se omite solo esa fila** y el resto sigue funcionando. Para ver cuáles, abre la web con `?admin` al final de la URL (`.../agenda-front-ampli/?admin`): sale la lista con el número de fila y el motivo. El panel también muestra las `features` que anuncia el script y cuántas inscripciones propias guarda ese navegador (`local signups`).
 - Hasta 3 eventos por día es lo previsto, pero si pones más se muestran todos y la casilla crece.
@@ -108,6 +124,47 @@ Recarga la URL `/exec?action=agenda`: el evento debe aparecer en `events` con `"
 - **Duplicados**: se permiten y se cuentan. Dos personas pueden llamarse igual, así que no se deduplica por nombre. Si la respuesta del servidor se pierde y la web reintenta, el `request_id` evita que se escriba dos veces.
 - **Quién lo ve**: la lista de apuntados es pública para cualquiera que tenga el enlace (y la URL del script es pública, porque va en el código de la web). Es una decisión aceptada. El modal pide escribir solo el nombre de pila o un apodo. Con un grupo de unas 100 personas, un nombre de pila junto con un lugar y una hora puede identificar a alguien.
 - **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` y borra las filas desde la hoja.
+
+## Backup y restauración del script
+
+El código del script existe en dos sitios que nada obliga a mantener iguales: `apps-script/Code.gs` y `apps-script/appsscript.json` en este repositorio, y el proyecto de Apps Script, donde se pega a mano. El backup es una **etiqueta de Git** (`script-v1`, `script-v2`…) sobre un commit en el que esos dos archivos son exactamente los desplegados. `script-v1` es el estado desplegado antes de R2.
+
+**Procedimiento en cada entrega que toque el script (R2 y R4):**
+
+1. **Anotar la versión en uso.** En *Implementar → Gestionar implementaciones*, apunta el número de versión N que usa la implementación de la web.
+2. **Capturar el estado real.** Copia el contenido de `Code.gs` y de `appsscript.json` del editor (allí el archivo se llama `Código.gs`) sobre los archivos de `apps-script/` y ejecuta `git diff` contra la última etiqueta (`git diff script-v1 -- apps-script/`). Sin diferencias, esa etiqueta ya es el backup. Con diferencias, haz commit «script: estado desplegado (versión N), antes de R2» (o R4) y crea la etiqueta siguiente: `git tag -a script-vK -m "script: estado desplegado (versión N)"`.
+3. **Desplegar.** *Gestionar implementaciones → ✎ → Versión nueva*, con la descripción de la entrega. La URL `/exec` no cambia.
+4. **Verificar** con las comprobaciones de *Comprobaciones después de publicar* y las propias de la entrega.
+5. **Guardar lo desplegado.** Apunta el número de versión nuevo N' que muestra el editor, pega de nuevo el contenido del editor sobre `apps-script/` (`git diff` debe salir vacío) y crea la etiqueta sobre el commit con ese código: `git tag -a script-vK -m "script: desplegado R2 (versión N')"`. Las etiquetas no se suben solas: `git push origin script-vK`.
+
+**Restauración si una entrega falla:**
+
+- **Rápida, mientras el proyecto exista:** *Gestionar implementaciones → ✎ → elegir la versión N*. Las versiones son instantáneas inmutables y la URL no cambia.
+- **Si esa versión ya no existe o el proyecto se dañó:** `git checkout script-v1 -- apps-script/Code.gs apps-script/appsscript.json` (así se vuelve al estado anterior a R2; usa la etiqueta del estado anterior a la entrega que falló), pega los dos archivos en el editor y despliega una versión nueva en la misma implementación. La URL no cambia. Son unos minutos.
+- **Datos.** El backup cubre el código, no la hoja. Para otros daños en la hoja se usa *Archivo → Historial de versiones* de Google Sheets.
+
+**Límites.** El backup solo protege lo que se copió al repositorio: un cambio hecho en el editor y nunca copiado no queda respaldado, y por eso los pasos 2 y 5 comparan con `git diff`. La copia del editor al repositorio se hace a mano, sin `clasp`, para no instalar herramientas ni activar la API de Apps Script.
+
+## Cómo publicar una entrega
+
+La web se despliega con `git push` a `main` (el flujo de CI comprueba, prueba y publica) y el script a mano. El orden es siempre **script, web, datos**:
+
+1. **Script** (solo si la entrega lo toca, R2 y R4): backup y despliegue según *Backup y restauración del script*. Siempre con *Gestionar implementaciones → ✎ → Versión nueva*, **nunca** *Nueva implementación*, que cambia la URL `/exec`. Los cambios del script son siempre aditivos: la web de antes sigue funcionando con el script nuevo, y la web nueva tolera un script antiguo (si faltan `responsable` o `inscripcio_url` los trata como vacíos).
+2. **Web:** `git push` a `main`.
+3. **Datos:** al final, lo que cambie en la hoja (cabeceras nuevas, responsables, URLs externas).
+
+**R2 (responsable y URL externa), paso a paso:**
+
+1. Backup del script (pasos 1 y 2 de *Backup y restauración del script*).
+2. Pega `apps-script/Code.gs` en el editor y despliega una *Versión nueva* (pasos 3 a 5).
+3. En la hoja, escribe a mano `responsable` en **J1** e `inscripcio_url` en **K1**, con formato de texto en J:K y la protección ampliada a J1:K1 (ver *Editar los eventos*).
+4. Comprobación de lectura y latencia (ver *Entrega del responsable y la URL externa (R2)*).
+5. `git push` a `main` y espera a que el CI publique.
+6. Rellena `responsable` e `inscripcio_url` en los eventos que los necesiten.
+
+**No se despliegan juntos:** lectura (R2) y escritura destructiva (R4) en la misma versión del script; datos con URL externa en la hoja antes de que la web de R2 esté publicada (la web antigua los ignoraría y dejaría apuntarse en la agenda); quitar la lista del modal antes de que el detalle la muestre.
+
+**Cómo se deshace una entrega:** la web, con `git revert` y `git push` (si el CI está en rojo, despliega la reversión con la entrada `skip_e2e`, ver *Puesta en marcha → 2. GitHub*); el script, volviendo a la versión anterior en *Gestionar implementaciones* o, si ya no existe, restaurando la etiqueta del backup.
 
 ## Desarrollo en local
 
@@ -138,6 +195,8 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 - **Botón Atrás en Android**: el detalle y el modal de inscripción son `<dialog>` nativos. No se ha tocado el historial del navegador, así que el comportamiento depende del navegador: en Chrome reciente Atrás cierra el diálogo (igual que Esc); en otros puede volver a la página anterior. Hay un botón *Tanca* siempre visible. *Resultado en Android:* pendiente de comprobar.
 - **Navegador interno de WhatsApp (S3)**: decide si se construye la baja de inscripción (que solo funciona si `localStorage` se conserva al cerrar y volver a abrir el enlace). *Resultado:* pendiente de comprobar (ver *Comprobaciones después de publicar*).
 - **No se indexa**: `noindex` en `src/app.html` y `robots.txt`.
+- **Latencia de `doGet` (R2)**: `doGet` lee las hojas completas en cada carga y un mensaje de WhatsApp puede producir una ráfaga de cargas. Se mide una vez (ver *Comprobaciones después de publicar*); si pasa de 3 s se añade una caché de 30 s. *Resultado:* pendiente de medir.
+- **`responsable` e `inscripcio_url` son públicos**: lo que escribas en esas columnas lo ve cualquiera que abra la web, y el campo `responsable` no se limita a nombres de pila. La URL externa solo admite `https://` y se abre con `rel="noopener noreferrer"`; el script devuelve ambos campos tal cual y es la web la que valida la URL.
 - **Colores**: lima `#CFE287`, naranja `#DE4B28`, y `#A8351A` (naranja oscuro) para el texto pequeño y las tarjetas de Actes. Lima sobre `#A8351A` da un contraste de 4,67:1 (cumple AA para texto normal). La cabecera usa `#EEF5CF` sobre el naranja (3,62:1: solo vale para texto grande, por eso el título y el mes tienen un mínimo de 24 px). Las maquetas de referencia están en [`docs/disseny/`](docs/disseny/).
 - **Licencias de las fuentes**: Special Gothic y Special Gothic Condensed One están bajo SIL OFL 1.1 y se sirven desde la propia web. Los textos de licencia están en [`static/licenses/`](static/licenses/).
 

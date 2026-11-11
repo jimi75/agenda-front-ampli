@@ -1,4 +1,4 @@
-id,data,inici,fi,tipus,nom,lloc,mapa,estat
-exemple-1,2026-11-07,10:00,14:00,Acció,Paradeta,"Plaça de Sants, Barcelona",,
-exemple-2,2026-11-12,19:00,21:00,Acte,Xerrada oberta,"Centre Cívic Cotxeres de Sants, Barcelona",,
-exemple-3,2026-11-21,09:30,,Acció,Repartiment de fulletons,"Mercat de la Bordeta, Barcelona",,Modificat
+id,data,inici,fi,tipus,nom,lloc,mapa,estat,responsable,inscripcio_url
+exemple-1,2026-11-07,10:00,14:00,Acció,Paradeta,"Plaça de Sants, Barcelona",,,Marta,
+exemple-2,2026-11-12,19:00,21:00,Acte,Xerrada oberta,"Centre Cívic Cotxeres de Sants, Barcelona",,,,https://example.org/inscripcio
+exemple-3,2026-11-21,09:30,,Acció,Repartiment de fulletons,"Mercat de la Bordeta, Barcelona",,Modificat,,

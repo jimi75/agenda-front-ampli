@@ -4,7 +4,7 @@
 
 /**
  * What a person can do with an event. The priority is: past, cancelled, external, closed, open.
- * `externalUrl` does not exist until R2, so before that no event is 'external'.
+ * An event with a valid `inscripcio_url` (`externalUrl`) is 'external'; without it, it never is.
  * @param {{ date: string, status: string, externalUrl?: string }} event
  * @param {{ today: string, signupsOpen: boolean }} context
  * @returns {ParticipationState}

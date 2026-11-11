@@ -86,7 +86,7 @@ for (const offline of [false, true]) {
 
 		await detail.getByRole('button', { name: T.detail.close }).click();
 		await expect(detail).toBeHidden();
-		await expect(cards(page)).toHaveCount(4);
+		await expect(cards(page)).toHaveCount(6);
 	});
 
 	test(`?e= conegut (${source}) obre el detall`, async ({ page }) => {

@@ -4,6 +4,7 @@ import {
 	formatHour,
 	formatRange,
 	groupByDate,
+	httpsUrl,
 	mapsUrl,
 	normalizeEvents,
 	parseEventParam,
@@ -156,6 +157,50 @@ test('entrada que no és una llista dona 0 esdeveniments', () => {
 test('retalla textos molt llargs i neteja espais', () => {
 	const { events } = normalizeEvents([row({ nom: ` ${'x'.repeat(300)} ` })]);
 	assert.equal(events[0].name.length, 120);
+});
+
+test('responsable: es neteja d’espais i es retalla a 60 caràcters', () => {
+	assert.equal(normalizeEvents([row({ responsable: '  Marta  ' })]).events[0].manager, 'Marta');
+	assert.equal(normalizeEvents([row({ responsable: 'x'.repeat(100) })]).events[0].manager, 'x'.repeat(60));
+	assert.equal(normalizeEvents([row({ responsable: '   ' })]).events[0].manager, '');
+});
+
+test('httpsUrl: només https:// sense espais; la resta és buida', () => {
+	assert.equal(httpsUrl('https://example.org/inscripcio'), 'https://example.org/inscripcio');
+	assert.equal(httpsUrl('  HTTPS://example.org  '), 'HTTPS://example.org');
+	assert.equal(httpsUrl('http://example.org'), '');
+	assert.equal(httpsUrl('javascript:alert(1)'), '');
+	assert.equal(httpsUrl('https://example.org/a b'), '');
+	assert.equal(httpsUrl('https://'), '');
+	assert.equal(httpsUrl(''), '');
+	assert.equal(httpsUrl(undefined), '');
+});
+
+test('inscripcio_url: https vàlida; amb http, javascript: o espais es tracta com a buida', () => {
+	const externalUrl = (/** @type {string} */ value) =>
+		normalizeEvents([row({ inscripcio_url: value })]).events[0].externalUrl;
+	assert.equal(externalUrl('https://example.org/inscripcio'), 'https://example.org/inscripcio');
+	assert.equal(externalUrl(' https://example.org/inscripcio '), 'https://example.org/inscripcio');
+	assert.equal(externalUrl('http://example.org/inscripcio'), '');
+	assert.equal(externalUrl('javascript:alert(1)'), '');
+	assert.equal(externalUrl('https://example.org/ins cripcio'), '');
+});
+
+test('sense les columnes noves es comporta com abans, amb manager i externalUrl buits', () => {
+	const { events, skipped } = normalizeEvents([row({})]);
+	assert.deepEqual(skipped, []);
+	assert.equal(events[0].manager, '');
+	assert.equal(events[0].externalUrl, '');
+	assert.equal(events[0].mapUrl, 'https://www.google.com/maps/search/?api=1&query=Pla%C3%A7a%20de%20Sants');
+});
+
+test('inscripcio_url no afecta mapUrl, ni mapa afecta externalUrl', () => {
+	const { events } = normalizeEvents([
+		row({ mapa: 'https://maps.app.goo.gl/abc', inscripcio_url: 'https://example.org/inscripcio' })
+	]);
+	assert.equal(events[0].mapUrl, 'https://maps.app.goo.gl/abc');
+	assert.equal(events[0].externalUrl, 'https://example.org/inscripcio');
+	assert.equal(normalizeEvents([row({ mapa: 'https://maps.app.goo.gl/abc' })]).events[0].externalUrl, '');
 });
 
 test('parseEventParam: id vàlid, caràcters no vàlids, més de 20 caràcters i sense paràmetre', () => {
