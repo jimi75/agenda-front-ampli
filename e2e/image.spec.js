@@ -71,10 +71,9 @@ test('un nom i un lloc llargs es retallen i queden dins la imatge', async ({ pag
 });
 
 test('si no es pot generar la imatge, es diu i el botó queda a punt per tornar-ho a provar', async ({ page }) => {
-	await page.addInitScript(() => {
-		// Simulates a font that never loads.
-		document.fonts.check = () => false;
-	});
+	// The font files fail to download. Stubbing `document.fonts.check` is not reliable: WebKit drops
+	// properties added to `document.fonts`, so the failure would only happen sometimes.
+	await page.route(/special-gothic-condensed-one-.*\.woff2?$/, (route) => route.abort());
 	await openAgenda(page);
 	await card(page, 'accio-1').getByRole('link', { name: /^Veure el detall de/ }).click();
 	const detail = detailDialog(page);
