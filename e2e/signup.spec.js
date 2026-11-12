@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { T } from '../src/lib/texts.js';
-import { card, detailDialog, openAgenda, readMine, signupDialog } from './helpers.js';
+import { card, detailDialog, MINE_KEY, openAgenda, readMine, signupDialog } from './helpers.js';
 
 /** @param {import('@playwright/test').Page} page @param {string} name */
 async function submitName(page, name) {
@@ -12,7 +12,8 @@ async function submitName(page, name) {
 test('alta des de la targeta: apareix a la llista, s’escriu al full i es desa el registre local', async ({
 	page
 }) => {
-	const { signups } = await openAgenda(page);
+	// The real script now answers `features: ['unsignup']`; this test is about a script that predates it.
+	const { signups } = await openAgenda(page, { options: { features: [] } });
 	await card(page, 'accio-1').getByRole('button', { name: /^Participar a/ }).click();
 
 	const dialog = signupDialog(page);
@@ -23,8 +24,9 @@ test('alta des de la targeta: apareix a la llista, s’escriu al full i es desa 
 
 	await submitName(page, 'Eva');
 	await expect(dialog.getByText(T.dialog.success)).toBeVisible();
-	// Without `features` in the script's answer, the modal does not promise an unsignup.
+	// With a script that predates `features`, the modal does not promise an unsignup.
 	await expect(dialog.getByText(T.participation.hint)).toHaveCount(0);
+	await expect(dialog.getByRole('region', { name: T.participation.mine })).toHaveCount(0);
 
 	const rows = signups();
 	expect(rows).toHaveLength(1);
@@ -118,4 +120,267 @@ test('?admin mostra features i el nombre de registres locals', async ({ page }) 
 	await expect(signupDialog(page).getByText(T.dialog.success)).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(page.getByText('features: unsignup · local signups: 1')).toBeVisible();
+});
+
+// ---- R4: unsignup ----
+
+/** @param {import('@playwright/test').Page} page @param {string} id @param {string} name */
+async function signUp(page, id, name) {
+	await card(page, id).getByRole('button', { name: /^Participar a/ }).click();
+	await submitName(page, name);
+	await expect(signupDialog(page).getByText(T.dialog.success)).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(signupDialog(page)).toBeHidden();
+}
+
+/** Opens the modal of an event and returns its «La teva participació» section. @param {import('@playwright/test').Page} page @param {string} id */
+async function openMine(page, id) {
+	await card(page, id).getByRole('button', { name: /^Participar a/ }).click();
+	return signupDialog(page).getByRole('region', { name: T.participation.mine });
+}
+
+/** Two taps on the unsign button of one record. @param {import('@playwright/test').Locator} section @param {number} [index] */
+async function confirmUnsign(section, index = 0) {
+	const button = section.getByRole('listitem').nth(index).getByRole('button');
+	await button.click();
+	await expect(button).toHaveText(T.participation.unsignConfirm);
+	await button.click();
+}
+
+/** Rows of `Inscripcions` as [event_id, nom]. @param {Array<string[]>} rows */
+const idsAndNames = (rows) => rows.map((row) => row.slice(1, 3));
+
+/** @param {import('@playwright/test').Page} page */
+const mineItems = async (page) => (await readMine(page))?.items ?? [];
+
+test('«La teva participació» només surt al navegador que s’ha apuntat i a l’esdeveniment propi', async ({
+	page,
+	browser,
+	baseURL,
+	locale,
+	timezoneId
+}) => {
+	await openAgenda(page);
+	const before = signupDialog(page).getByRole('region', { name: T.participation.mine });
+	await card(page, 'accio-1').getByRole('button', { name: /^Participar a/ }).click();
+	await expect(signupDialog(page)).toBeVisible();
+	await expect(before).toHaveCount(0);
+	await page.keyboard.press('Escape');
+
+	await signUp(page, 'accio-1', 'Eva');
+	const section = await openMine(page, 'accio-1');
+	await expect(section).toBeVisible();
+	await expect(section.getByRole('listitem')).toHaveText([new RegExp(`Eva\\s*${T.participation.unsign}`)]);
+	// The form stays available, and the modal of another event has no section.
+	await expect(signupDialog(page).getByLabel(T.dialog.nameLabel)).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(signupDialog(page)).toBeHidden();
+	await card(page, 'acte-1').getByRole('button', { name: /^Participar a/ }).click();
+	await expect(signupDialog(page)).toBeVisible();
+	await expect(signupDialog(page).getByRole('region', { name: T.participation.mine })).toHaveCount(0);
+	await page.keyboard.press('Escape');
+
+	// A new browser context has no local record, so no button either.
+	const other = await browser.newContext({ baseURL, locale, timezoneId });
+	try {
+		const otherPage = await other.newPage();
+		await openAgenda(otherPage);
+		await card(otherPage, 'accio-1').getByRole('button', { name: /^Participar a/ }).click();
+		await expect(signupDialog(otherPage)).toBeVisible();
+		await expect(signupDialog(otherPage).getByRole('region', { name: T.participation.mine })).toHaveCount(0);
+		await expect(otherPage.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
+	} finally {
+		await other.close();
+	}
+});
+
+test('amb un script sense features, el registre local no ofereix «Desapuntar-me»', async ({ page }) => {
+	await openAgenda(page, { options: { features: [] } });
+	await signUp(page, 'accio-1', 'Eva');
+	await card(page, 'accio-1').getByRole('button', { name: /^Participar a/ }).click();
+	await expect(signupDialog(page).getByRole('region', { name: T.participation.mine })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
+	expect(await mineItems(page)).toHaveLength(1);
+});
+
+test('desapuntar-se exigeix dos tocs: arxiva a Baixes, esborra la fila i actualitza la llista', async ({
+	page
+}) => {
+	const { signups, baixes } = await openAgenda(page, {
+		prepare: ({ script }) => {
+			script.sheets.get('Inscripcions')?.rows.push(['2026-11-09 18:00:00', 'accio-1', 'Pau', 'pau-request-0001']);
+		}
+	});
+	await signUp(page, 'accio-1', 'Eva');
+	const evaId = signups()[1][3];
+	await expect(card(page, 'accio-1')).toContainText(T.count(2));
+
+	const section = await openMine(page, 'accio-1');
+	const button = section.getByRole('button');
+	await expect(button).toHaveText(T.participation.unsign);
+	await button.click();
+	// The first tap only asks for confirmation: nothing is written.
+	await expect(button).toHaveText(T.participation.unsignConfirm);
+	expect(signups()).toHaveLength(2);
+	expect(baixes()).toEqual([]);
+	// ... and it goes back by itself after a few seconds.
+	await expect(button).toHaveText(T.participation.unsign, { timeout: 8000 });
+	expect(signups()).toHaveLength(2);
+
+	/** @type {Array<string | null>} */
+	const requests = [];
+	page.on('request', (request) => {
+		if (request.method() === 'POST') requests.push(request.postData());
+	});
+	await button.click();
+	await expect(button).toHaveText(T.participation.unsignConfirm);
+	// A repeated tap while the request is on its way must not send a second one.
+	await button.dblclick({ force: true });
+	await expect(signupDialog(page).getByText(T.participation.unsignDone)).toBeVisible();
+	expect(requests).toHaveLength(1);
+	expect(JSON.parse(requests[0] ?? '{}')).toMatchObject({ action: 'unsignup', eventId: 'accio-1', requestId: evaId });
+
+	expect(idsAndNames(signups())).toEqual([['accio-1', 'Pau']]);
+	expect(baixes()).toHaveLength(1);
+	expect(baixes()[0].slice(1)).toEqual(['accio-1', 'Eva', evaId]);
+	expect(await mineItems(page)).toEqual([]);
+	await expect(section.getByRole('listitem')).toHaveCount(0);
+
+	await page.keyboard.press('Escape');
+	await expect(signupDialog(page)).toBeHidden();
+	await expect(card(page, 'accio-1')).toContainText(T.count(1));
+	await card(page, 'accio-1').getByRole('link', { name: /^Veure el detall de/ }).click();
+	const list = detailDialog(page).getByRole('list', { name: T.detail.listTitle });
+	await expect(list).toContainText('Pau');
+	await expect(list).not.toContainText('Eva');
+});
+
+test('si el nom ja no és al full, la baixa respon «Ja no hi eres a la llista» i treu el registre', async ({
+	page
+}) => {
+	const { script, baixes } = await openAgenda(page);
+	await signUp(page, 'accio-1', 'Eva');
+	// The owner removed the row by hand in the meantime.
+	script.sheets.get('Inscripcions')?.rows.splice(1);
+	const section = await openMine(page, 'accio-1');
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.participation.alreadyGone)).toBeVisible();
+	expect(baixes()).toEqual([]);
+	expect(await mineItems(page)).toEqual([]);
+});
+
+test('amb registres duplicats del mateix esdeveniment, cada baixa treu només el seu', async ({ page }) => {
+	const { signups, baixes } = await openAgenda(page);
+	await signUp(page, 'accio-1', 'Eva');
+	await signUp(page, 'accio-1', 'Eva');
+	const [first, second] = signups().map((row) => row[3]);
+	expect(first).not.toBe(second);
+
+	const section = await openMine(page, 'accio-1');
+	await expect(section.getByRole('listitem')).toHaveCount(2);
+	await confirmUnsign(section, 0);
+	await expect(signupDialog(page).getByText(T.participation.unsignDone)).toBeVisible();
+	await expect(section.getByRole('listitem')).toHaveCount(1);
+	expect(signups().map((row) => row[3])).toEqual([second]);
+	expect(baixes().map((row) => row[3])).toEqual([first]);
+	expect((await mineItems(page)).map((item) => item.requestId)).toEqual([second]);
+
+	await confirmUnsign(section, 0);
+	await expect(section.getByRole('listitem')).toHaveCount(0);
+	expect(signups()).toEqual([]);
+	expect(baixes().map((row) => row[3])).toEqual([first, second]);
+	expect(await mineItems(page)).toEqual([]);
+});
+
+test('un error de xarxa o d’ocupat conserva el registre i es pot repetir', async ({ page }) => {
+	const { signups, baixes, options } = await openAgenda(page);
+	await signUp(page, 'accio-1', 'Eva');
+	const section = await openMine(page, 'accio-1');
+	const button = section.getByRole('button');
+
+	options.down = true;
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.signupErrors.network)).toBeVisible();
+	await expect(button).toHaveText(T.participation.unsign);
+	expect(await mineItems(page)).toHaveLength(1);
+	expect(signups()).toHaveLength(1);
+
+	options.down = false;
+	options.busy = true;
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.signupErrors.busy)).toBeVisible();
+	expect(await mineItems(page)).toHaveLength(1);
+	expect(signups()).toHaveLength(1);
+	expect(baixes()).toEqual([]);
+
+	options.busy = false;
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.participation.unsignDone)).toBeVisible();
+	expect(signups()).toEqual([]);
+	expect(baixes()).toHaveLength(1);
+	expect(await mineItems(page)).toEqual([]);
+});
+
+test('si la resposta de la baixa es perd, el registre es conserva i repetir-la és inofensiu', async ({ page }) => {
+	const { signups, baixes, options } = await openAgenda(page);
+	await signUp(page, 'accio-1', 'Eva');
+	const section = await openMine(page, 'accio-1');
+
+	options.loseAnswer = true;
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.signupErrors.network)).toBeVisible();
+	// The script did remove the row, but the browser never knew.
+	expect(signups()).toEqual([]);
+	expect(baixes()).toHaveLength(1);
+	expect(await mineItems(page)).toHaveLength(1);
+
+	options.loseAnswer = false;
+	await confirmUnsign(section);
+	await expect(signupDialog(page).getByText(T.participation.alreadyGone)).toBeVisible();
+	expect(baixes()).toHaveLength(1);
+	expect(await mineItems(page)).toEqual([]);
+});
+
+/** Local records written before the page loads, as an old visit would have left them. @param {import('@playwright/test').Page} page @param {string[]} ids */
+async function seedMine(page, ids) {
+	const items = ids.map((eventId, i) => ({ eventId, requestId: `seed-request-${i}0001`, name: 'Eva' }));
+	await page.addInitScript(
+		({ key, items }) => {
+			if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ v: 1, items }));
+		},
+		{ key: MINE_KEY, items }
+	);
+}
+
+test('no s’ofereix la baixa en un esdeveniment passat, cancel·lat o amb inscripció externa', async ({ page }) => {
+	await seedMine(page, ['pasat-1', 'cancel-1', 'ext-1']);
+	await openAgenda(page);
+	for (const id of ['pasat-1', 'cancel-1', 'ext-1']) {
+		await expect(card(page, id)).toHaveCount(1);
+		await expect(card(page, id).getByRole('button', { name: /^Participar a/ })).toHaveCount(0);
+	}
+	for (const id of ['pasat-1', 'cancel-1', 'ext-1']) {
+		await page.goto(`./?e=${id}`);
+		await expect(detailDialog(page)).toBeVisible();
+		await expect(page.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
+		await expect(signupDialog(page)).toHaveCount(0);
+	}
+});
+
+test('amb B1 = NO no s’ofereix la baixa, ni al detall', async ({ page }) => {
+	await seedMine(page, ['accio-1']);
+	await openAgenda(page, { options: { closed: true } });
+	await expect(card(page, 'accio-1').getByRole('button', { name: /^Participar a/ })).toHaveCount(0);
+	await card(page, 'accio-1').getByRole('button', { name: /^Veure qui s’ha apuntat/ }).click();
+	await expect(detailDialog(page)).toBeVisible();
+	await expect(page.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
+	await expect(signupDialog(page)).toHaveCount(0);
+});
+
+test('el detall mai ofereix la baixa, ni en un esdeveniment obert amb registre local', async ({ page }) => {
+	await openAgenda(page);
+	await signUp(page, 'accio-1', 'Eva');
+	await card(page, 'accio-1').getByRole('link', { name: /^Veure el detall de/ }).click();
+	await expect(detailDialog(page)).toBeVisible();
+	await expect(detailDialog(page).getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
 });
