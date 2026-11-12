@@ -270,3 +270,37 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 1. `Config!B1` → `NO`.
 2. Descarga o borra las pestañas `Inscripcions` y `Baixes` (son datos de personas).
 3. Si no se va a reutilizar: en Apps Script, *Implementar → Gestionar implementaciones → Archivar*, y desactiva GitHub Pages o borra el repositorio.
+
+## System Overview
+
+Static SvelteKit site (`adapter-static`, prerendered) that reads and writes its data through a Google Apps Script web app bound to a Google Sheet. The browser talks to the script with `GET ?action=agenda` and `POST` actions `signup` / `unsignup`; see *Cómo funciona* above for the diagram.
+
+## Local Interface & Invariants
+
+- [vite.config.js](./vite.config.js): SvelteKit plugin with `adapter-static`, runes mode forced outside `node_modules`; `paths.base` is `BASE_PATH` only when `NODE_ENV === 'production'`, otherwise `''`.
+- [playwright.config.js](./playwright.config.js): `testDir: 'e2e'`, `webServer` = `node e2e/serve.js`, projects `chromium`, `mobile`, `webkit` (see [e2e](./e2e/README.md)).
+- [package.json](./package.json) scripts: `dev`, `build`, `preview`, `check`, `test`, `test:e2e`; `imports` alias `#lib` → `./src/lib/index.js`, `#lib/*` → `./src/lib/*`.
+
+## Subdirectories & System Boundaries
+
+- src: [./src/README.md](./src/README.md) - SvelteKit app shell, [lib](./src/lib/README.md) (logic, API client, texts, [components](./src/lib/components/README.md)) and [routes](./src/routes/README.md) (the single page).
+- apps-script: [./apps-script/README.md](./apps-script/README.md) - `Code.gs` backend (`doGet`, `doPost`, `setup`), its manifest and the in-memory Google fake used by tests.
+- e2e: [./e2e/README.md](./e2e/README.md) - Playwright specs and the in-browser Apps Script stand-in.
+
+## Global Invariants
+
+- The month range (days 2–29 of 2026-11) and the name rule are duplicated in `src/lib/config.js` / `src/lib/names.js` and `apps-script/Code.gs`; both sides must change together. The server copy is authoritative.
+- The browser never learns another person's `request_id`; it exists only in `Inscripcions`/`Baixes` and in the sign-up's own browser `localStorage`.
+- POSTs to the script are `text/plain` JSON with no custom headers (no CORS preflight); script answers are always HTTP 200.
+
+## Global Side Effects
+
+- Google Sheet tabs `Esdeveniments`, `Inscripcions`, `Baixes`, `Config` (through `apps-script/Code.gs`).
+- Browser `localStorage` keys `agenda-sants-montjuic-2026-11` (offline copy) and `agenda-sants-montjuic-2026-11:mine` (own sign-ups).
+- `npm run build` writes `build/`; `.github/workflows/deploy.yml` publishes it to GitHub Pages.
+
+## System Verification
+
+- Run: `npm test` (unit tests: `src/lib` and `apps-script`)
+- Types: `npm run check`
+- Browser: `npm run test:e2e`
