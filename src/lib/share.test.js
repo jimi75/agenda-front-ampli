@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detailUrl, copyText, downloadFile, shareText, waLink } from './share.js';
+import { detailUrl, copyText, downloadFile, shareImage, shareText, waLink } from './share.js';
 import { T } from './texts.js';
 
 test('detailUrl: origen + ruta + ?e=, sense arrossegar ?admin ni altres paràmetres', () => {
@@ -98,4 +98,80 @@ test('downloadFile: sense suport de download obre la URL en una pestanya nova', 
 	assert.deepEqual(log, ['open blob:fake-1 _blank noopener']);
 	timers[0]();
 	assert.equal(log.at(-1), 'revoke blob:fake-1');
+});
+
+const IMAGE = new File(['x'], 'agenda-a1.png', { type: 'image/png' });
+const TEXT = 'Apunta’t a l’activitat aquí: https://example.test/?e=a1';
+
+/**
+ * A navigator that records what `share` receives. `outcome` is what `share` does: resolve (`undefined`)
+ * or reject with a DOMException of that name.
+ * @param {string | undefined} [outcome] @param {{ canShare?: boolean }} [options]
+ */
+function fakeNav(outcome, { canShare = true } = {}) {
+	/** @type {ShareData[]} */
+	const calls = [];
+	return {
+		calls,
+		nav: {
+			canShare: () => canShare,
+			share: async (/** @type {ShareData} */ data) => {
+				calls.push(data);
+				if (outcome) throw new DOMException('refused', outcome);
+			}
+		}
+	};
+}
+
+test('shareImage: shared, i envia un sol share amb l’arxiu i el text', async () => {
+	const { nav, calls } = fakeNav();
+	assert.equal(await shareImage(IMAGE, TEXT, { nav }), 'shared');
+	assert.equal(calls.length, 1);
+	assert.deepEqual(calls[0], { files: [IMAGE], text: TEXT });
+});
+
+test('shareImage: AbortError és aborted', async () => {
+	const { nav } = fakeNav('AbortError');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav }), 'aborted');
+});
+
+test('shareImage: NotAllowedError és needs-second-tap', async () => {
+	const { nav } = fakeNav('NotAllowedError');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav }), 'needs-second-tap');
+});
+
+test('shareImage: qualsevol altre error és error', async () => {
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: fakeNav('DataError').nav }), 'error');
+	const throwsPlain = { canShare: () => true, share: async () => Promise.reject('res') };
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: throwsPlain }), 'error');
+});
+
+test('shareImage: unsupported si no hi ha share, sense cridar-lo', async () => {
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: {} }), 'unsupported');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: { canShare: () => true } }), 'unsupported');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: /** @type {any} */ (null) }), 'unsupported');
+});
+
+test('shareImage: unsupported si canShare no accepta l’arxiu, sense cridar share', async () => {
+	const { nav, calls } = fakeNav(undefined, { canShare: false });
+	assert.equal(await shareImage(IMAGE, TEXT, { nav }), 'unsupported');
+	assert.equal(calls.length, 0);
+	// Without canShare the files cannot be known to work: also unsupported.
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: { share: async () => {} } }), 'unsupported');
+});
+
+test('shareImage: amb second: true, NotAllowedError és error i no un altre segon toc', async () => {
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: fakeNav('NotAllowedError').nav, second: true }), 'error');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: fakeNav().nav, second: true }), 'shared');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: fakeNav('AbortError').nav, second: true }), 'aborted');
+	assert.equal(await shareImage(IMAGE, TEXT, { nav: fakeNav(undefined, { canShare: false }).nav, second: true }), 'unsupported');
+});
+
+test('shareImage: share es crida de forma síncrona, sense cap await abans (també amb second: true)', () => {
+	for (const second of [false, true]) {
+		const { nav, calls } = fakeNav();
+		const pending = shareImage(IMAGE, TEXT, { nav, second });
+		assert.equal(calls.length, 1, 'share s’ha cridat abans que la funció torni el control');
+		assert.ok(pending instanceof Promise);
+	}
 });

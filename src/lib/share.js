@@ -35,6 +35,31 @@ export async function copyText(text, nav = globalThis.navigator) {
 }
 
 /**
+ * Shares an image with the text through the system panel (Web Share API with files).
+ * Nothing is awaited before `nav.share` is called, so a tap that calls this keeps its user
+ * activation. `canShare` is checked here, with the file already made, and not before generating it.
+ * - `shared`: the share went through. `aborted`: the person closed the panel (or there is no target).
+ * - `needs-second-tap`: the browser refused with `NotAllowedError` (usually the activation expired
+ *   while the image was generated); with `second: true` that is an `error`, never a new second tap.
+ * - `unsupported`: no `share`, or `canShare` does not accept the file. `error`: anything else.
+ * @param {File} file @param {string} text
+ * @param {{ nav?: { share?: (data: ShareData) => Promise<void>, canShare?: (data: ShareData) => boolean }, second?: boolean }} [options]
+ * @returns {Promise<'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'>}
+ */
+export async function shareImage(file, text, { nav = globalThis.navigator, second = false } = {}) {
+	if (!nav?.share || !nav.canShare?.({ files: [file] })) return 'unsupported';
+	try {
+		await nav.share({ files: [file], text });
+		return 'shared';
+	} catch (error) {
+		const name = /** @type {{ name?: unknown } | null} */ (error)?.name;
+		if (name === 'AbortError') return 'aborted';
+		if (name === 'NotAllowedError') return second ? 'error' : 'needs-second-tap';
+		return 'error';
+	}
+}
+
+/**
  * Saves a generated file with a temporary `<a download>` over an object URL. A browser without
  * `download` support opens the URL in a new tab instead.
  * @param {File} file
