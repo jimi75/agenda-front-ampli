@@ -94,3 +94,83 @@ export async function hasInk(page, png, region, background) {
 	return /** @type {Promise<boolean>} */ (readRegion(page, png, region, background));
 }
 
+/**
+ * Replaces `navigator.share` and `navigator.canShare` before the page loads. `behaviour` has one entry
+ * per `share` call: `'ok'` resolves and any other value rejects with a DOMException of that name, for
+ * example `['NotAllowedError', 'ok']` for «refuses once, then works». Calls past the list resolve.
+ * Every call is kept in `window.__shareCalls` as `{files, text}` with the real `File` objects, so a
+ * test can tell whether two calls got the very same file. With `files: false`, `canShare` refuses files.
+ * @param {import('@playwright/test').Page} page
+ * @param {string[]} [behaviour] @param {{ files?: boolean }} [options]
+ */
+export async function mockShare(page, behaviour = ['ok'], { files = true } = {}) {
+	await page.addInitScript(
+		({ behaviour, files }) => {
+			/** @type {Array<{ files: File[], text?: string }>} */
+			const calls = [];
+			Object.assign(window, { __shareCalls: calls });
+			Object.defineProperty(navigator, 'canShare', {
+				configurable: true,
+				value: (/** @type {ShareData} */ data) => files || !data?.files?.length
+			});
+			Object.defineProperty(navigator, 'share', {
+				configurable: true,
+				value: async (/** @type {ShareData} */ data) => {
+					const outcome = behaviour[calls.length] ?? 'ok';
+					calls.push({ files: [...(data.files ?? [])], text: data.text });
+					if (outcome !== 'ok') throw new DOMException('simulated', outcome);
+				}
+			});
+		},
+		{ behaviour, files }
+	);
+}
+
+/**
+ * What the page passed to the mocked `navigator.share`, as plain data (file name, type and size).
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<Array<{ files: Array<{ name: string, type: string, size: number }>, text?: string }>>}
+ */
+export function shareCalls(page) {
+	return page.evaluate(() =>
+		/** @type {any} */ (window).__shareCalls.map((/** @type {{ files: File[], text?: string }} */ call) => ({
+			files: call.files.map((file) => ({ name: file.name, type: file.type, size: file.size })),
+			text: call.text
+		}))
+	);
+}
+
+/** Whether two calls of the mocked `navigator.share` got the very same `File` object. @param {import('@playwright/test').Page} page */
+export function sameShareFile(page, first = 0, second = 1) {
+	return page.evaluate(
+		([a, b]) => {
+			const calls = /** @type {any} */ (window).__shareCalls;
+			return calls[a].files[0] === calls[b].files[0];
+		},
+		[first, second]
+	);
+}
+
+/**
+ * Counts, from the next page load, how many times the poster is put in the page: one per generation.
+ * Read the count with `postersRendered`.
+ * @param {import('@playwright/test').Page} page
+ */
+export async function trackPosters(page) {
+	await page.addInitScript(() => {
+		Object.assign(window, { __posters: 0 });
+		new MutationObserver((records) => {
+			for (const record of records) {
+				for (const node of record.addedNodes) {
+					if (node instanceof Element && (node.matches('.poster') || node.querySelector('.poster'))) {
+						/** @type {any} */ (window).__posters++;
+					}
+				}
+			}
+		}).observe(document, { childList: true, subtree: true });
+	});
+}
+
+/** @param {import('@playwright/test').Page} page */
+export const postersRendered = (page) => page.evaluate(() => /** @type {any} */ (window).__posters);
+
