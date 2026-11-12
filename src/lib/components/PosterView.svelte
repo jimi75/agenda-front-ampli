@@ -1,6 +1,7 @@
 <script>
 	import { POSTER } from '#lib/config.js';
 	import { formatRange } from '#lib/events.js';
+	import { posterScale } from '#lib/poster-scale.js';
 	import { T } from '#lib/texts.js';
 
 	/**
@@ -11,6 +12,8 @@
 	 * }}
 	 */
 	let { event, dateLabel, node = $bindable() } = $props();
+
+	const k = $derived(posterScale(event.name, event.place));
 </script>
 
 <!-- Only mounted while the image is generated. Off screen but painted (not display: none). -->
@@ -19,6 +22,7 @@
 	class="poster {event.type}"
 	style:width="{POSTER.width}px"
 	style:height="{POSTER.height}px"
+	style:--k={k}
 	aria-hidden="true"
 >
 	<div class="band">{T.siteTitle}</div>
@@ -80,13 +84,13 @@
 	}
 
 	.type {
-		font-size: 56px;
+		font-size: calc(56px * var(--k));
 		letter-spacing: 0.08em;
 	}
 
 	.name {
-		margin-top: 24px;
-		font-size: 128px;
+		margin-top: calc(24px * var(--k));
+		font-size: calc(128px * var(--k));
 		line-height: 1.02;
 		display: -webkit-box;
 		-webkit-box-orient: vertical;
@@ -97,16 +101,16 @@
 
 	.day,
 	.time {
-		font-size: 76px;
+		font-size: calc(76px * var(--k));
 	}
 
 	.day {
-		margin-top: 40px;
+		margin-top: calc(40px * var(--k));
 	}
 
 	.place {
-		margin-top: 32px;
-		font-size: 64px;
+		margin-top: calc(32px * var(--k));
+		font-size: calc(64px * var(--k));
 		line-height: 1.1;
 		display: -webkit-box;
 		-webkit-box-orient: vertical;

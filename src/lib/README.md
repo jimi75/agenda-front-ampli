@@ -14,6 +14,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'external' | 'closed' | 'open'`.
 - [share.js](./share.js): `detailUrl`, `shareText`, `waLink`, `copyText`, `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
 - [poster.js](./poster.js): `renderPoster(node, id)` → `Promise<File>` (`agenda-<id>.png`).
+- [poster-scale.js](./poster-scale.js): `posterScale(name, place)` → scale factor of the poster text (`1.9`, `1.5`, `1.15` or `1`) by character count.
 - [texts.js](./texts.js): `T`, the single object with every Catalan UI string (including `T.signupErrors` keyed by error code).
 - [index.js](./index.js): comment-only placeholder for the `#lib` alias; exports nothing.
 - Subdirectories: [components/](./components/README.md) (Svelte components). `assets/` holds only `favicon.svg` and has no contract.

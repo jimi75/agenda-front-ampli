@@ -8,7 +8,7 @@ Svelte 5 (runes) presentational components of the agenda page. They receive data
 - [EventCard.svelte](./EventCard.svelte): props `{ event, count, dateLabel, state, mine, canUnsign, ondetail, onparticipate, onunsign }`; `detail` link (`?e=<id>`) opens the detail on a plain left click only; action is an external `Participar` link (`state === 'external'`), `Desapuntar-me` button (`'open'`, `canUnsign` and at least one record in `mine`), `Participar` button (`'open'` otherwise) or `Veure apuntats` button (other states).
 - [EventDetail.svelte](./EventDetail.svelte): props `{ event, names, state, dateLabel, url, notFound, onclose, onparticipate }`; modal with event data, participation block, sign-up list, copy link, «Descarrega la imatge» and «Comparteix» (share states `idle | ready | fallback | failed`).
 - [SignupDialog.svelte](./SignupDialog.svelte): props `{ event, dateLabel, features, mine, onsubmit, onunsign, onclose }`; name form (phases `idle | sending | done`) and, when `features` includes `'unsignup'`, the «La teva participació» list with a two-tap «Desapuntar-me».
-- [PosterView.svelte](./PosterView.svelte): props `{ event, dateLabel, node (bindable) }`; off-screen `POSTER.width × POSTER.height` poster captured by `renderPoster`.
+- [PosterView.svelte](./PosterView.svelte): props `{ event, dateLabel, node (bindable) }`; off-screen `POSTER.width × POSTER.height` poster captured by `renderPoster`. Font sizes and body margins are multiplied by `posterScale(event.name, event.place)` through `--k`.
 - [Header.svelte](./Header.svelte): static title and `T.monthLabel`.
 - [Legend.svelte](./Legend.svelte): static `accio` / `acte` chips from `T.types`.
 

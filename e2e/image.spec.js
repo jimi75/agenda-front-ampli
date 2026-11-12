@@ -70,6 +70,26 @@ test('un nom i un lloc llargs es retallen i queden dins la imatge', async ({ pag
 	expect(await hasInk(page, png, { x: POSTER.width - 80, y: 200, width: 80, height: POSTER.height - 200 }, background)).toBe(false);
 });
 
+test('un nom i un lloc curts s’escalen i omplen la imatge sense sortir-ne', async ({ page }) => {
+	await openAgenda(page, {
+		prepare: ({ script }) => {
+			const row = script.sheets.get('Esdeveniments')?.rows.find((r) => r[0] === 'accio-1');
+			if (!row) throw new Error('Falta accio-1');
+			row[EVENT_HEADER_OPTIONAL.indexOf('nom')] = 'Paradeta';
+			row[EVENT_HEADER_OPTIONAL.indexOf('lloc')] = 'Plaça Olivareta';
+		}
+	});
+	const { png } = await downloadImage(page, 'accio-1');
+	expect(readPngSize(png)).toEqual(POSTER);
+
+	const background = await cssColor(page, '--lime');
+	// With k = 1 the text ends near y = 770; scaled, it reaches the lower part ...
+	expect(await hasInk(page, png, { x: 0, y: 1050, width: POSTER.width, height: 230 }, background)).toBe(true);
+	// ... but not the bottom margin nor the right margin.
+	expect(await hasInk(page, png, { x: 0, y: 1290, width: POSTER.width, height: POSTER.height - 1290 }, background)).toBe(false);
+	expect(await hasInk(page, png, { x: POSTER.width - 80, y: 200, width: 80, height: POSTER.height - 200 }, background)).toBe(false);
+});
+
 test('si no es pot generar la imatge, es diu i el botó queda a punt per tornar-ho a provar', async ({ page }) => {
 	// The font files fail to download. Stubbing `document.fonts.check` is not reliable: WebKit drops
 	// properties added to `document.fonts`, so the failure would only happen sometimes.
