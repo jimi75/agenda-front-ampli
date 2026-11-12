@@ -127,7 +127,7 @@ for (const [id, note] of [
 		await expect(detail).toContainText(T.detail.listEmpty);
 		await expect(detail.getByRole('button', { name: T.participate })).toHaveCount(0);
 		await expect(detail.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
-		await expect(detail.getByRole('link', { name: new RegExp(T.share.share) })).toHaveCount(0);
+		await expect(detail.getByRole('button', { name: T.share.share })).toHaveCount(0);
 		await expect(detail.getByRole('button', { name: T.share.copyLink })).toHaveCount(0);
 	});
 
@@ -181,7 +181,7 @@ test('obert amb ?e=, en tancar el focus va al títol de la pàgina', async ({ pa
 	await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
 });
 
-test('«Comparteix» obre wa.me només amb text i «Copia l’enllaç» copia l’URL sense ?admin', async ({
+test('«Comparteix» és un botó (sense enllaç wa.me de principi) i «Copia l’enllaç» copia l’URL sense ?admin', async ({
 	page,
 	context
 }) => {
@@ -190,10 +190,8 @@ test('«Comparteix» obre wa.me només amb text i «Copia l’enllaç» copia l�
 	const detail = detailDialog(page);
 	const url = 'http://localhost:5300/agenda-front-ampli/?e=accio-1';
 
-	const share = detail.getByRole('link', { name: new RegExp(`^${T.share.share}`) });
-	await expect(share).toHaveAttribute('href', `https://wa.me/?text=${encodeURIComponent(T.share.text(url))}`);
-	await expect(share).toHaveAttribute('target', '_blank');
-	await expect(share).toHaveAttribute('rel', /noopener/);
+	await expect(detail.getByRole('button', { name: T.share.share })).toBeEnabled();
+	await expect(detail.getByRole('link', { name: new RegExp(T.share.waLink) })).toHaveCount(0);
 
 	await detail.getByRole('button', { name: T.share.copyLink }).click();
 	await expect(detail.getByText(T.share.copied)).toBeVisible();

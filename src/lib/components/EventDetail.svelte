@@ -1,8 +1,8 @@
 <script>
-	import { tick } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { formatRange } from '#lib/events.js';
 	import { renderPoster } from '#lib/poster.js';
-	import { copyText, downloadFile, shareText, waLink } from '#lib/share.js';
+	import { copyText, downloadFile, shareImage, shareText, waLink } from '#lib/share.js';
 	import { T } from '#lib/texts.js';
 	import PosterView from './PosterView.svelte';
 
@@ -30,25 +30,63 @@
 	/** @type {'idle' | 'copied' | 'failed'} */
 	let copyState = $state('idle');
 	let generating = $state(false);
+	/** @type {'download' | 'share' | null} */
+	let generatingFor = $state(null);
+	/** A «Descarrega la imatge» that failed to generate. */
 	let imageFailed = $state(false);
+	/** @typedef {'idle' | 'ready' | 'fallback' | 'failed'} ShareView */
+	// Where «Comparteix» is. `ready`: the browser refused with `NotAllowedError` and the file waits
+	// for a second tap. `fallback`: the image was downloaded and the text goes through the `wa.me`
+	// link. `failed`: the image could not be generated; only the `wa.me` link is offered.
+	let shareView = $state(/** @type {ShareView} */ ('idle'));
+	/** The system share panel is open. */
+	let sharing = $state(false);
+	/** The generated file, kept only while `shareView` is `ready`. @type {File | null} */
+	let readyFile = null;
+	/** Changes whenever the detail closes or shows another event, so a late result is dropped. */
+	let epoch = 0;
 	let posterVisible = $state(false);
 	/** @type {HTMLElement | undefined} */
 	let posterNode = $state();
 	const visible = $derived(event !== null || notFound);
 	const canShare = $derived(participation === 'open' || participation === 'closed' || participation === 'external');
+	const busy = $derived(generating || sharing);
+	const showWaLink = $derived(shareView === 'fallback' || shareView === 'failed');
+
+	function resetShare() {
+		epoch++;
+		readyFile = null;
+		shareView = 'idle';
+		generating = false;
+		generatingFor = null;
+		sharing = false;
+		posterVisible = false;
+		imageFailed = false;
+	}
 
 	// The parent owns "which event is open"; this effect keeps the native dialog in sync.
 	$effect(() => {
 		if (!dialog) return;
 		if (visible && !dialog.open) {
 			copyState = 'idle';
-			imageFailed = false;
+			untrack(resetShare);
 			dialog.showModal();
 			tick().then(() => closeButton?.focus());
 		} else if (!visible && dialog.open) {
 			dialog.close();
 		}
 	});
+
+	// Another event in the same open dialog: nothing of the previous one is kept.
+	$effect(() => {
+		void event?.id;
+		untrack(resetShare);
+	});
+
+	function handleClose() {
+		resetShare();
+		onclose();
+	}
 
 	async function copy() {
 		copyState = (await copyText(url)) ? 'copied' : 'failed';
@@ -59,23 +97,92 @@
 		}
 	}
 
-	/** The poster is mounted only while it is generated, and the image is rendered again on every tap. */
-	async function download() {
-		if (generating || !event) return;
-		const { id } = event;
+	/**
+	 * Renders the image of the open event. The poster is mounted only while it is generated.
+	 * Returns `null` if it failed, or if the detail closed meanwhile (nothing is shown then).
+	 * @param {'download' | 'share'} purpose
+	 * @returns {Promise<{ file: File | null, stale: boolean }>}
+	 */
+	async function generate(purpose) {
+		const token = epoch;
 		generating = true;
-		imageFailed = false;
+		generatingFor = purpose;
 		posterVisible = true;
 		try {
 			await tick();
-			if (!posterNode) throw new Error('image_failed');
-			downloadFile(await renderPoster(posterNode, id));
+			if (!posterNode || !event) throw new Error('image_failed');
+			return { file: await renderPoster(posterNode, event.id), stale: token !== epoch };
 		} catch {
-			imageFailed = true;
+			return { file: null, stale: token !== epoch };
 		} finally {
-			posterVisible = false;
-			generating = false;
+			if (token === epoch) {
+				posterVisible = false;
+				generating = false;
+				generatingFor = null;
+			}
 		}
+	}
+
+	/** The image is rendered again on every tap. */
+	async function download() {
+		if (busy || !event) return;
+		imageFailed = false;
+		const { file, stale } = await generate('download');
+		if (stale) return;
+		if (file) downloadFile(file);
+		else imageFailed = true;
+	}
+
+	/** @param {File} file */
+	function fallbackWithDownload(file) {
+		downloadFile(file);
+		shareView = 'fallback';
+	}
+
+	/** First tap: generates the image and shares it. */
+	async function shareFirst() {
+		if (!event) return;
+		shareView = 'idle';
+		imageFailed = false;
+		const { file, stale } = await generate('share');
+		if (stale) return;
+		if (!file) {
+			shareView = 'failed';
+			return;
+		}
+		const token = epoch;
+		sharing = true;
+		const outcome = await shareImage(file, shareText(url));
+		if (token !== epoch) return;
+		sharing = false;
+		if (outcome === 'needs-second-tap') {
+			readyFile = file;
+			shareView = 'ready';
+		} else if (outcome === 'unsupported' || outcome === 'error') {
+			fallbackWithDownload(file);
+		}
+	}
+
+	/** Second tap: `shareImage` is called with no `await` before it, so the tap keeps its activation. */
+	function shareSecond() {
+		const file = readyFile;
+		if (!file) return;
+		const token = epoch;
+		const pending = shareImage(file, shareText(url), { second: true });
+		readyFile = null;
+		shareView = 'idle';
+		sharing = true;
+		pending.then((outcome) => {
+			if (token !== epoch) return;
+			sharing = false;
+			if (outcome === 'unsupported' || outcome === 'error') fallbackWithDownload(file);
+		});
+	}
+
+	function share() {
+		if (busy || !event) return;
+		if (shareView === 'ready') shareSecond();
+		else shareFirst();
 	}
 
 	/** @param {MouseEvent} clickEvent */
@@ -85,7 +192,7 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-<dialog bind:this={dialog} aria-labelledby="detail-title" {onclose} onclick={closeOnBackdrop}>
+<dialog bind:this={dialog} aria-labelledby="detail-title" onclose={handleClose} onclick={closeOnBackdrop}>
 	{#if event || notFound}
 		<div class="panel">
 			<div class="top">
@@ -157,21 +264,33 @@
 
 				{#if canShare}
 					<section class="share">
-						<button type="button" class="action" disabled={generating} onclick={download}>
-							{generating ? T.share.generating : T.share.download}
+						<button type="button" class="action" disabled={busy} onclick={download}>
+							{generatingFor === 'download' ? T.share.generating : T.share.download}
 						</button>
-						<a class="action" href={waLink(shareText(url))} target="_blank" rel="noopener noreferrer"
-							>{T.share.share}<span class="sr-only"> {T.newTab}</span></a
-						>
+						<button type="button" class="action" disabled={busy} onclick={share}>
+							{generatingFor === 'share'
+								? T.share.generating
+								: shareView === 'ready'
+									? T.share.ready
+									: T.share.share}
+						</button>
 						<button type="button" class="action" onclick={copy}>{T.share.copyLink}</button>
+						{#if showWaLink}
+							<a class="action" href={waLink(shareText(url))} target="_blank" rel="noopener noreferrer"
+								>{T.share.waLink}<span class="sr-only"> {T.newTab}</span></a
+							>
+						{/if}
 						<p class="live" aria-live="polite">
-							{imageFailed
+							{#if shareView === 'ready'}<span class="sr-only">{T.share.ready}</span>{/if}
+							{imageFailed || shareView === 'failed'
 								? T.share.imageFailed
-								: copyState === 'copied'
-									? T.share.copied
-									: copyState === 'failed'
-										? T.share.copyFailed
-										: ''}
+								: shareView === 'fallback'
+									? T.share.fallbackNote
+									: copyState === 'copied'
+										? T.share.copied
+										: copyState === 'failed'
+											? T.share.copyFailed
+											: ''}
 						</p>
 						{#if copyState === 'failed'}
 							<input
