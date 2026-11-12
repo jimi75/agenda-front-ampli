@@ -1,5 +1,5 @@
 import { REQUEST_TIMEOUT_MS, STORAGE_KEY } from './config.js';
-import { addMine } from './my-signups.js';
+import { addMine, removeMine } from './my-signups.js';
 
 /**
  * @typedef {{
@@ -8,7 +8,12 @@ import { addMine } from './my-signups.js';
  * }} Agenda
  * @typedef {Agenda & { staleSince: number | null }} LoadedAgenda
  * @typedef {{ ok: true, names: string[], requestId: string, recovered?: boolean } | { ok: false, error: string }} SignupResult
- * @typedef {{ loadAgenda: () => Promise<LoadedAgenda>, signup: (eventId: string, name: string, knownCount: number) => Promise<SignupResult> }} AgendaApi
+ * @typedef {{ ok: true, names: string[], removed: boolean } | { ok: false, error: string }} UnsignResult
+ * @typedef {{
+ *   loadAgenda: () => Promise<LoadedAgenda>,
+ *   signup: (eventId: string, name: string, knownCount: number) => Promise<SignupResult>,
+ *   unsignup: (eventId: string, requestId: string) => Promise<UnsignResult>
+ * }} AgendaApi
  */
 
 const isString = (/** @type {unknown} */ v) => typeof v === 'string';
@@ -111,6 +116,29 @@ export function createApi({
 			const result = await send(eventId, name, knownCount, requestId);
 			if (result.ok) addMine(storage, { eventId, requestId, name });
 			return result;
+		},
+
+		/**
+		 * Idempotent on the server, so a network failure is not recovered: the caller just repeats it
+		 * with the same requestId. The local record only goes away when the server answers ok.
+		 */
+		async unsignup(eventId, requestId) {
+			let json;
+			try {
+				json = await request(url, {
+					method: 'POST',
+					headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+					body: JSON.stringify({ action: 'unsignup', eventId, requestId })
+				});
+			} catch {
+				return { ok: false, error: 'network' };
+			}
+			if (json?.ok === true && Array.isArray(json.names) && typeof json.removed === 'boolean') {
+				removeMine(storage, eventId, requestId);
+				return { ok: true, names: json.names.filter(isString), removed: json.removed };
+			}
+			if (json?.ok === false && isString(json.error)) return { ok: false, error: json.error };
+			return { ok: false, error: 'server' };
 		}
 	};
 

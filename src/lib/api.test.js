@@ -257,3 +257,153 @@ test('signup: un error del servidor, de xarxa o sense confirmar no desa cap regi
 	assert.deepEqual(await offline.signup('a1', 'Pau', 0), { ok: false, error: 'unconfirmed' });
 	assert.deepEqual(readMine(storage), []);
 });
+
+/** A storage that already has two records of a1 and one of b2. */
+function storageWithRecords() {
+	const storage = memoryStorage();
+	storage.setItem(
+		'agenda-sants-montjuic-2026-11:mine',
+		JSON.stringify({
+			v: 1,
+			items: [
+				{ eventId: 'a1', requestId: 'req-pau-0001', name: 'Pau' },
+				{ eventId: 'a1', requestId: 'req-pau-0002', name: 'Pau' },
+				{ eventId: 'b2', requestId: 'req-eva-0003', name: 'Eva' }
+			]
+		})
+	);
+	return storage;
+}
+const recordIds = (/** @type {ReturnType<typeof memoryStorage>} */ storage) => readMine(storage).map((i) => i.requestId);
+
+test('unsignup: POST simple (text/plain, sense altres capçaleres) i quin cos envia', async () => {
+	/** @type {any} */
+	let sent;
+	/** @type {string} */
+	let target = '';
+	const api = createApi({
+		url: 'https://example.test/exec',
+		storage: storageWithRecords(),
+		fetchFn: /** @type {any} */ (
+			async (/** @type {string} */ url, /** @type {RequestInit} */ init) => {
+				target = url;
+				sent = init;
+				return reply({ ok: true, v: 1, eventId: 'a1', names: ['Pau'], removed: true });
+			}
+		)
+	});
+	await api.unsignup('a1', 'req-pau-0001');
+	assert.equal(target, 'https://example.test/exec');
+	assert.equal(sent.method, 'POST');
+	assert.deepEqual(Object.keys(sent.headers), ['Content-Type']);
+	assert.equal(sent.headers['Content-Type'], 'text/plain;charset=utf-8');
+	assert.deepEqual(JSON.parse(sent.body), { action: 'unsignup', eventId: 'a1', requestId: 'req-pau-0001' });
+});
+
+test('unsignup: removed true i removed false treuen el registre local i tornen els noms', async () => {
+	const storage = storageWithRecords();
+	const answers = [
+		{ ok: true, v: 1, eventId: 'a1', names: ['Pau'], removed: true },
+		{ ok: true, v: 1, eventId: 'a1', names: [], removed: false }
+	];
+	const api = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		fetchFn: /** @type {any} */ (async () => reply(answers.shift()))
+	});
+	assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: true, names: ['Pau'], removed: true });
+	assert.deepEqual(recordIds(storage), ['req-pau-0002', 'req-eva-0003'], 'només cau el registre d’aquesta baixa');
+	assert.deepEqual(await api.unsignup('a1', 'req-pau-0002'), { ok: true, names: [], removed: false });
+	assert.deepEqual(recordIds(storage), ['req-eva-0003'], 'també amb removed:false (ja no hi era)');
+});
+
+test('unsignup: filtra els noms que no són text', async () => {
+	const api = createApi({
+		url: 'https://example.test/exec',
+		storage: storageWithRecords(),
+		fetchFn: /** @type {any} */ (
+			async () => reply({ ok: true, v: 1, eventId: 'a1', names: ['Eva', 5, null, 'Pau'], removed: true })
+		)
+	});
+	assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: true, names: ['Eva', 'Pau'], removed: true });
+});
+
+test('unsignup: un error del servidor es transmet tal qual i el registre es conserva', async () => {
+	for (const error of ['busy', 'server', 'bad_request']) {
+		const storage = storageWithRecords();
+		const api = createApi({
+			url: 'https://example.test/exec',
+			storage,
+			fetchFn: /** @type {any} */ (async () => reply({ ok: false, v: 1, error }))
+		});
+		assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: false, error });
+		assert.equal(readMine(storage).length, 3, error);
+	}
+});
+
+test('unsignup: xarxa caiguda, HTTP no 200, JSON il·legible o timeout donen network i conserven el registre', async () => {
+	const failures = {
+		fetch: async () => {
+			throw new TypeError('Failed to fetch');
+		},
+		http: async () => reply({}, false),
+		json: async () => ({
+			ok: true,
+			json: async () => {
+				throw new SyntaxError('Unexpected token <');
+			}
+		}),
+		timeout: (/** @type {string} */ _url, /** @type {RequestInit} */ init) =>
+			new Promise((_resolve, reject) => {
+				init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+			})
+	};
+	for (const [label, fetchFn] of Object.entries(failures)) {
+		const storage = storageWithRecords();
+		let posts = 0;
+		const api = createApi({
+			url: 'https://example.test/exec',
+			storage,
+			timeoutMs: 20,
+			fetchFn: /** @type {any} */ (
+				(/** @type {string} */ url, /** @type {RequestInit} */ init) => (posts++, fetchFn(url, init))
+			)
+		});
+		assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: false, error: 'network' }, label);
+		assert.equal(readMine(storage).length, 3, label);
+		assert.equal(posts, 1, `${label}: sense recover, no es llegeix l’agenda ni es reenvia`);
+	}
+});
+
+test('unsignup: una resposta amb una forma que no és del contracte és server i conserva el registre', async () => {
+	const shapes = [
+		null,
+		'text',
+		{},
+		{ ok: true },
+		{ ok: true, names: 'Pau', removed: true },
+		{ ok: true, names: ['Pau'] },
+		{ ok: true, names: ['Pau'], removed: 'true' },
+		{ ok: false },
+		{ ok: false, error: 7 }
+	];
+	for (const shape of shapes) {
+		const storage = storageWithRecords();
+		const api = createApi({
+			url: 'https://example.test/exec',
+			storage,
+			fetchFn: /** @type {any} */ (async () => reply(shape))
+		});
+		assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: false, error: 'server' }, JSON.stringify(shape));
+		assert.equal(readMine(storage).length, 3, JSON.stringify(shape));
+	}
+});
+
+test('unsignup: sense storage també respon (no hi ha registre per treure)', async () => {
+	const api = createApi({
+		url: 'https://example.test/exec',
+		storage: null,
+		fetchFn: /** @type {any} */ (async () => reply({ ok: true, v: 1, eventId: 'a1', names: [], removed: false }))
+	});
+	assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: true, names: [], removed: false });
+});
