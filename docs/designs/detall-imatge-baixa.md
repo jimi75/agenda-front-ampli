@@ -257,20 +257,20 @@ Todos los textos nuevos, en catalán, van a `src/lib/texts.js`, en los grupos nu
 
 ### Backup y restauración del script
 
-El código del script existe en dos sitios que nada obliga a mantener iguales: `apps-script/Code.gs` y `apps-script/appsscript.json` en el repositorio, y el proyecto de Apps Script, donde se pega a mano. El backup consiste en guardar en Git, con un commit, el código exacto que está desplegado, antes y después de cada cambio.
+El código del script existe en dos sitios que nada obliga a mantener iguales: `apps-script/Code.gs` y `apps-script/appsscript.json` en el repositorio, y el proyecto de Apps Script, donde se pega a mano. Además, el editor puede ir por delante de lo desplegado: una implementación apunta a una versión numerada (una instantánea), y lo que se guarda después en el editor no se publica hasta crear una versión nueva. Ya pasó en este proyecto (un cambio del 11 de noviembre estaba en el editor y en el repositorio y nunca se desplegó). Por eso «sin diferencias entre el editor y el repositorio» no prueba que el repositorio sea lo desplegado; lo prueba la respuesta real del script (paso 4). El backup es una etiqueta de Git, `script-vN` con N igual a la versión de Apps Script, sobre un commit que contiene el código exacto, antes y después de cada cambio.
 
 **Procedimiento en cada entrega que toque el script (R2 y R4):**
 
-1.  **Anotar la versión en uso.** En «Gestionar implementaciones», apuntar el número de versión N que usa la implementación de la web.
-2.  **Capturar el estado real.** Copiar el contenido de `Code.gs` y de `appsscript.json` del editor (en el editor el archivo se llama `Código.gs`) sobre los archivos de `apps-script/` y ejecutar `git diff`. Hacer commit con el mensaje «script: estado desplegado (versión N), antes de R2» (o R4). Si no hay diferencias, usar `git commit --allow-empty` para dejar la marca.
-3.  **Desplegar.** «Gestionar implementaciones → ✎ → Versión nueva», con la descripción de la entrega. La URL `/exec` no cambia.
-4.  **Verificar** con las comprobaciones del README y las propias de la entrega.
-5.  **Guardar lo desplegado.** Anotar el número de versión nuevo que muestra el editor, pegar de nuevo el contenido del editor sobre `apps-script/` (`git diff` debe salir vacío) y hacer commit «script: desplegado R2 (versión N')».
+1.  **Anotar la versión en uso.** En «Gestionar implementaciones», apuntar el número de versión N que usa la implementación de la web, y su ID (el de la URL `/exec` de `AGENDA_API_URL`).
+2.  **Capturar el estado.** Copiar el contenido de `Code.gs` y de `appsscript.json` del editor (en el editor el archivo se llama `Código.gs`) sobre los archivos de `apps-script/` y ejecutar `git diff`. Si hay diferencias, hacer commit «script: estado del editor antes de R2». Crear la etiqueta `script-vN` sobre el commit que contiene ese código y subirla (`git push origin script-vN`; una etiqueta no dispara el CI).
+3.  **Desplegar.** «Gestionar implementaciones → ✎» de la implementación **cuyo ID coincide con el de la web** → «Versión nueva», con la descripción de la entrega. La URL `/exec` no cambia. Nunca «Nueva implementación»: crea un ID y una URL distintos, y la web seguiría llamando al script antiguo. Si ocurre, se mueve la implementación de la web a la versión nueva y se archiva la extra.
+4.  **Verificar la respuesta real**, no solo el editor: `curl -sL "$URL?action=agenda"` contra la URL de la web debe contener lo que cambia la entrega (R2: `responsable` e `inscripcio_url` en cada evento). Después, las comprobaciones del README y las propias de la entrega.
+5.  **Guardar lo desplegado.** Anotar el número de versión nuevo N' que muestra el editor, pegar de nuevo el contenido del editor sobre `apps-script/` (`git diff` debe salir vacío) y crear y subir la etiqueta `script-vN'` sobre el commit con ese código.
 
 **Restauración si una entrega falla:**
 
-*   **Rápida, mientras el proyecto exista:** «Gestionar implementaciones → ✎ → elegir la versión N». Las versiones son instantáneas inmutables y la URL no cambia.
-*   **Si esa versión ya no existe o el proyecto se dañó:** `git checkout <commit del paso 2> -- apps-script/Code.gs apps-script/appsscript.json`, pegar los dos archivos en el editor y desplegar una versión nueva en la misma implementación. La URL no cambia. Son unos minutos.
+*   **Rápida, mientras el proyecto exista:** «Gestionar implementaciones → ✎ de la implementación de la web → elegir la versión N». Las versiones son instantáneas inmutables y la URL no cambia. Es la restauración fiable del estado desplegado.
+*   **Si esa versión ya no existe o el proyecto se dañó:** `git checkout script-vN -- apps-script/Code.gs apps-script/appsscript.json` (con la etiqueta del estado anterior a la entrega que falló), pegar los dos archivos en el editor y desplegar una versión nueva en la misma implementación. La URL no cambia. Son unos minutos.
 *   **Datos.** El backup cubre el código, no la hoja. Los nombres dados de baja con `unsignup` quedan en `Baixes`. Para otros daños en la hoja se usa el historial de versiones de Google Sheets y la copia de `Inscripcions` hecha antes de R4.
 
 **Límites.** El backup solo protege lo que se copió al repositorio: un cambio hecho en el editor y nunca copiado no queda respaldado, y por eso los pasos 2 y 5 comparan con `git diff`. La copia del editor al repositorio se hace a mano, sin `clasp`, para no instalar herramientas ni activar la API de Apps Script. Esta elección es del plan y no del autor; `clasp pull` queda como mejora futura.
@@ -438,7 +438,7 @@ Las decisiones con más de una respuesta defendible las eligió el autor entre l
 *   La imagen se genera en el navegador al pulsar el botón, a 2048 × 1346 px (unos 2,8 millones de píxeles). Objetivo: menos de 5 s en un iPhone antiguo y en un Android de gama baja, que se mide en el spike S1; no hay tiempo medido todavía. Si se supera, R3 pasa a la alternativa del canvas o se descarta.
 *   `html-to-image` suma al paquete principal una cantidad por medir con `vite build` en R3 (estimación: unos 7 KB comprimidos).
 *   El CI suma la descarga de Chromium y la ejecución de las pruebas de navegador; el job de WebKit es aparte y no bloquea.
-*   `doGet` lee las hojas completas en cada carga de la página, y un mensaje de WhatsApp puede producir una ráfaga de cargas. Apps Script limita las ejecuciones simultáneas (el límite no se ha verificado) y una respuesta fallida no lleva cabeceras CORS, así que la página no distingue qué falló. En R2 se mide una vez la latencia de `doGet` con `curl -w '%{time_total}'`; si pasa de 3 s, se añade una caché de `CacheService` de 30 s. Hasta entonces no hay caché (ver Non-Goals).
+*   `doGet` lee las hojas completas en cada carga de la página, y un mensaje de WhatsApp puede producir una ráfaga de cargas. Apps Script limita las ejecuciones simultáneas (el límite no se ha verificado) y una respuesta fallida no lleva cabeceras CORS, así que la página no distingue qué falló. En R2 se midió la latencia de `doGet` con `curl -w '%{time_total}'` sobre la URL de la web (12 de noviembre, con el script de R2): entre 2,6 y 3,6 s (media cercana a 3,0 s), frente a 1,0–1,3 s de una petición que no lee la hoja (`?action=x`), que es la base de la plataforma. La lectura de las pestañas pesa unos 1,8 s y es lo único que una caché recortaría. Decisión: de momento no hay caché (ver Non-Goals). Una caché exigiría invalidarla en cada alta, para que la lista no se quede desfasada, y una versión más del script; si se hace, se hace junto con el despliegue del script de R4. Se reconsidera si tras difundir el enlace aparecen errores de carga.
 *   Cada baja añade una lectura y una escritura bajo el mismo lock de 10 s del script. Con unos 100 usuarios no se espera contención.
 
 ### Rollout & Rollback
@@ -462,7 +462,7 @@ Las decisiones con más de una respuesta defendible las eligió el autor entre l
 | `unsignup` borra una fila de otra persona | Baja | Alto | Búsqueda por `event_id` más `request_id` no vacío, relectura de la fila justo antes de borrar por índice de cabecera, nombre archivado en `Baixes` | Un `requestId` conocido por otra persona |
 | El CI en rojo impide desplegar una reversión | Media | Alto | Entrada `skip_e2e` de `workflow_dispatch`; `webkit` no bloquea | Uso incorrecto de `skip_e2e` |
 | El código del script desplegado se desvía del repositorio | Media | Medio | Backup con commit antes y después, comparado con `git diff` | Cambios hechos en el editor y no copiados |
-| Ráfaga de cargas de `doGet` tras un mensaje de WhatsApp | Media | Bajo | Medición de latencia en R2; caché de 30 s si pasa de 3 s | Límite de ejecuciones simultáneas de Apps Script sin verificar |
+| Ráfaga de cargas de `doGet` tras un mensaje de WhatsApp | Media | Bajo | Latencia medida en R2 (2,6–3,6 s, de los que 1,0–1,3 s son plataforma); sin caché por ahora, se reconsidera con R4 o si aparecen errores de carga | Límite de ejecuciones simultáneas de Apps Script sin verificar |
 | Las personas ajenas al grupo ocupan el lock con `signup` o `unsignup` | Baja | Bajo | `busy` con reintento; riesgo aceptado por el autor | Spam ya aceptado |
 
 --------------------------------------------------------------------------------
