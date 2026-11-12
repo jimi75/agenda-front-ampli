@@ -42,6 +42,14 @@ jobs:
         if: ${{ !inputs.skip_e2e }}
         run: npm run test:e2e -- --project=chromium --project=mobile
 
+      # Només avisa: el risc de la imatge en blanc de WebKit no ha de bloquejar el desplegament.
+      - name: Prova d'imatge a WebKit (no bloqueja)
+        if: ${{ !inputs.skip_e2e }}
+        continue-on-error: true
+        run: |
+          npx playwright install --with-deps webkit
+          npx playwright test --project=webkit
+
       - name: Comprovar la URL de l'Apps Script
         env:
           AGENDA_API_URL: ${{ vars.AGENDA_API_URL }}
