@@ -14,6 +14,7 @@ SvelteKit routes. A single static page that loads the agenda, orchestrates the c
 - The `?e=<id>` link is read once after the first successful load via `parseEventParam`; with no link, the list on narrow screens (below `min-width: 1024px`) scrolls to the next day with events.
 - `unreadable` (no valid events and `missingColumns` or skipped rows present) shows an error with retry instead of an empty calendar.
 - The `?admin` query parameter only reveals the diagnostics block (features, local sign-ups, missing columns, skipped rows).
+- `Calendar` receives `mine`, `data.features` and the same `unsignup` handler as `SignupDialog`, so a card can remove the browser's own signup directly.
 - After each `signup` / `unsignup`, `mine` is re-read from `localStorage`; a `closed` signup error sets `signupsOpen` to `false` locally.
 - `openSignup` triggers a silent reload so the shown list is fresh.
 

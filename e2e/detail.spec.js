@@ -256,7 +256,7 @@ for (const width of [390, 1024, 1100, 1280]) {
 				textTransform: s.textTransform
 			};
 		});
-		expect(style).toEqual({ fontSize: '16px', fontWeight: '400', letterSpacing: 'normal', textTransform: 'none' });
+		expect(style).toEqual({ fontSize: '12.8px', fontWeight: '400', letterSpacing: 'normal', textTransform: 'none' });
 
 		await detailLink(page, 'accio-1').click();
 		const dialog = detailDialog(page);

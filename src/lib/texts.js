@@ -36,6 +36,8 @@ export const T = {
 		n === 0 ? 'Ningú apuntat' : n === 1 ? '1 persona apuntada' : `${n} persones apuntades`,
 	participateLabel: (/** @type {string} */ name, /** @type {string} */ date) =>
 		`Participar a ${name}, ${date}`,
+	unsignLabel: (/** @type {string} */ name, /** @type {string} */ date) =>
+		`Desapuntar-me de ${name}, ${date}`,
 	viewSignupsLabel: (/** @type {string} */ name, /** @type {string} */ date) =>
 		`Veure qui s’ha apuntat a ${name}, ${date}`,
 	dateLabel: (/** @type {number} */ weekday, /** @type {number} */ day) =>

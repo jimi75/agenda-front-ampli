@@ -238,10 +238,13 @@
 			{month}
 			{byDate}
 			signups={data?.signups ?? new Map()}
+			{mine}
+			features={data?.features ?? []}
 			{today}
 			signupsOpen={data?.signupsOpen ?? true}
 			ondetail={openDetail}
 			onparticipate={openSignup}
+			onunsign={unsignup}
 		/>
 		{#if status === 'ready' && data && data.events.length === 0}
 			<p class="notice">{T.empty}</p>

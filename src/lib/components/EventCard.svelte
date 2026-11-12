@@ -8,11 +8,66 @@
 	 *   count: number,
 	 *   dateLabel: string,
 	 *   state: import('#lib/state.js').ParticipationState,
+	 *   mine: import('#lib/my-signups.js').MySignup[],
+	 *   canUnsign: boolean,
 	 *   ondetail: (id: string) => void,
-	 *   onparticipate: (id: string) => void
+	 *   onparticipate: (id: string) => void,
+	 *   onunsign: (eventId: string, requestId: string) => Promise<import('#lib/api.js').UnsignResult>
 	 * }}
 	 */
-	let { event, count, dateLabel, state, ondetail, onparticipate } = $props();
+	let { event, count, dateLabel, state: participation, mine, canUnsign, ondetail, onparticipate, onunsign } = $props();
+
+	const CONFIRM_MS = 5000;
+
+	let confirming = $state(false);
+	let unsigning = $state(false);
+	let message = $state('');
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	let confirmTimer;
+	let destroyed = false;
+
+	const showUnsign = $derived(participation === 'open' && canUnsign && mine.length > 0);
+
+	$effect(() => () => {
+		destroyed = true;
+		clearTimeout(confirmTimer);
+	});
+
+	// A confirmation must not outlive the offer (the record is gone or the event closed).
+	$effect(() => {
+		if (!showUnsign) clearConfirm();
+	});
+
+	function clearConfirm() {
+		clearTimeout(confirmTimer);
+		confirming = false;
+	}
+
+	/** One own record is removed here with two taps; with several, the modal lists them. */
+	async function unsign() {
+		if (unsigning) return;
+		if (mine.length !== 1) {
+			clearConfirm();
+			onparticipate(event.id);
+			return;
+		}
+		if (!confirming) {
+			message = '';
+			confirming = true;
+			confirmTimer = setTimeout(() => (confirming = false), CONFIRM_MS);
+			return;
+		}
+		clearConfirm();
+		unsigning = true;
+		const result = await onunsign(event.id, mine[0].requestId);
+		if (destroyed) return;
+		unsigning = false;
+		if (!result.ok) {
+			message = T.signupErrors[result.error] ?? T.signupErrors.server;
+		} else {
+			message = result.removed ? T.participation.unsignDone : T.participation.alreadyGone;
+		}
+	}
 
 	/** Only a plain click opens the detail here; Ctrl, Cmd, Shift and middle click keep the browser's own behaviour. @param {MouseEvent} click */
 	function openDetail(click) {
@@ -22,7 +77,7 @@
 	}
 </script>
 
-<article class="event {event.type}" class:past={state === 'past'} class:cancelled={event.status === 'cancelled'}>
+<article class="event {event.type}" class:past={participation === 'past'} class:cancelled={event.status === 'cancelled'}>
 	<p class="tags">
 		<span class="type">{T.types[event.type]}</span>
 		{#if event.status}<span class="status">{T.status[event.status]}</span>{/if}
@@ -50,7 +105,7 @@
 		<p class="manager">{T.card.manager(event.manager)}</p>
 	{/if}
 	<div class="actions">
-		{#if state === 'external'}
+		{#if participation === 'external'}
 			<a
 				class="button"
 				href={event.externalUrl}
@@ -60,17 +115,35 @@
 			>
 		{:else}
 			<p class="count">{T.count(count)}</p>
-			<button
-				type="button"
-				aria-label={state === 'open'
-					? T.participateLabel(event.name, dateLabel)
-					: T.viewSignupsLabel(event.name, dateLabel)}
-				onclick={() => (state === 'open' ? onparticipate(event.id) : ondetail(event.id))}
-			>
-				{state === 'open' ? T.participate : T.viewSignups}
-			</button>
+			{#if showUnsign}
+				<button
+					type="button"
+					class="unsign"
+					class:confirm={confirming}
+					aria-label={T.unsignLabel(event.name, dateLabel)}
+					disabled={unsigning}
+					onclick={unsign}
+				>
+					{unsigning
+						? T.participation.unsigning
+						: confirming
+							? T.participation.unsignConfirm
+							: T.participation.unsign}
+				</button>
+			{:else}
+				<button
+					type="button"
+					aria-label={participation === 'open'
+						? T.participateLabel(event.name, dateLabel)
+						: T.viewSignupsLabel(event.name, dateLabel)}
+					onclick={() => (participation === 'open' ? onparticipate(event.id) : ondetail(event.id))}
+				>
+					{participation === 'open' ? T.participate : T.viewSignups}
+				</button>
+			{/if}
 		{/if}
 	</div>
+	<p class="unsign-result" role="status">{message}</p>
 </article>
 
 <style>
@@ -104,6 +177,7 @@
 	.tags {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: 0.4rem;
 		margin: 0;
 		font-size: 0.72rem;
@@ -117,12 +191,12 @@
 	.detail {
 		margin: -0.3rem 0 -0.3rem auto;
 		padding: 0.3rem 0 0.3rem 0.4rem;
-		font-size: 1rem;
+		font-size: 0.8rem;
 		font-weight: 400;
 		letter-spacing: normal;
 		text-transform: none;
 		color: inherit;
-		text-decoration: underline;
+		text-decoration: none;
 		text-underline-offset: 0.18em;
 	}
 
@@ -187,6 +261,8 @@
 		margin-top: 0.5rem;
 	}
 
+	.actions:has(:only-child) { justify-content: right } 
+
 	.count {
 		margin: 0;
 		font-size: 0.85rem;
@@ -206,6 +282,29 @@
 		font: 700 0.95rem/1 var(--font-text);
 		text-decoration: none;
 		cursor: pointer;
+	}
+
+	.unsign-result {
+		margin: 0;
+		font-size: 0.85rem;
+		font-weight: 700;
+	}
+
+	button.unsign {
+		border: 2px solid currentColor;
+		background: transparent;
+		color: inherit;
+	}
+
+	button.unsign.confirm {
+		border-color: var(--badge-bg);
+		background: var(--badge-bg);
+		color: var(--badge-fg);
+	}
+
+	button.unsign:disabled {
+		opacity: 0.7;
+		cursor: progress;
 	}
 
 	/* The grid starts at 1024px, where each day column is only about 140px wide. */

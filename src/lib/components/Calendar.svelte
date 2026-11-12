@@ -8,13 +8,17 @@
 	 *   month: ReturnType<typeof import('#lib/month.js').buildMonth>,
 	 *   byDate: Map<string, import('#lib/events.js').AgendaEvent[]>,
 	 *   signups: Map<string, string[]>,
+	 *   mine: import('#lib/my-signups.js').MySignup[],
+	 *   features: string[],
 	 *   today: string,
 	 *   signupsOpen: boolean,
 	 *   ondetail: (id: string) => void,
-	 *   onparticipate: (id: string) => void
+	 *   onparticipate: (id: string) => void,
+	 *   onunsign: (eventId: string, requestId: string) => Promise<import('#lib/api.js').UnsignResult>
 	 * }}
 	 */
-	let { month, byDate, signups, today, signupsOpen, ondetail, onparticipate } = $props();
+	let { month, byDate, signups, mine, features, today, signupsOpen, ondetail, onparticipate, onunsign } =
+		$props();
 </script>
 
 <div class="calendar">
@@ -48,8 +52,11 @@
 						count={signups.get(event.id)?.length ?? 0}
 						dateLabel={T.dateLabel(d.weekday, d.day)}
 						state={participationState(event, { today, signupsOpen })}
+						mine={mine.filter((item) => item.eventId === event.id)}
+						canUnsign={features.includes('unsignup')}
 						{ondetail}
 						{onparticipate}
+						{onunsign}
 					/>
 				{/each}
 			</li>
