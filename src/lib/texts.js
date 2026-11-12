@@ -43,7 +43,7 @@ export const T = {
 	dateLabel: (/** @type {number} */ weekday, /** @type {number} */ day) =>
 		`${T.weekdays[weekday]} ${day} de ${MONTH.name}`,
 	card: {
-		detail: 'detall',
+		detail: 'compartir i més...',
 		detailLabel: (/** @type {string} */ name, /** @type {string} */ date) =>
 			`Veure el detall de ${name}, ${date}`,
 		manager: (/** @type {string} */ name) => `Responsable: ${name}`

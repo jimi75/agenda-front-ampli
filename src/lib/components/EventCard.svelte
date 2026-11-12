@@ -191,13 +191,12 @@
 	.detail {
 		margin: -0.3rem 0 -0.3rem auto;
 		padding: 0.3rem 0 0.3rem 0.4rem;
-		font-size: 0.8rem;
-		font-weight: 400;
-		letter-spacing: normal;
-		text-transform: none;
 		color: inherit;
-		text-decoration: none;
-		text-underline-offset: 0.18em;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		line-height: 1.2;
+		text-transform: uppercase;
 	}
 
 	.status {
