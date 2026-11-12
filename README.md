@@ -7,6 +7,7 @@ Web estática, en catalán, con las acciones y actos de **noviembre de 2026** de
 - Dos tipos: **Accions** (tarjeta lima) y **Actes** (tarjeta rojiza). Cada tarjeta lleva el nombre del tipo escrito, no solo el color.
 - Cada tarjeta tiene un enlace **detall** (arriba a la derecha, en la línea del tipo) que abre el detalle del evento: a pantalla completa en móvil y como panel centrado desde 1024 px. Muestra tipo, nombre, fecha y hora, lugar con enlace a Google Maps, recuento y lista de apuntados. Tocar la tarjeta en otro sitio no hace nada.
 - Cada evento abierto tiene botón **Participar**: abre un modal pequeño con el formulario (solo nombre o apodo). La tarjeta y el detalle muestran el recuento; la lista de apuntados está en el detalle. En un evento pasado, cancelado o con las inscripciones cerradas, la tarjeta ofrece **Veure apuntats**, que abre el detalle en solo lectura.
+- **Desapuntar-me** (R4): si el navegador guarda una inscripción propia de un evento abierto, el modal de **Participar** muestra además «La teva participació» con el nombre y el botón **Desapuntar-me** (dos toques). Solo en ese navegador y solo con el evento abierto; la web lo ofrece únicamente si el script anuncia `features: ["unsignup"]`. Ver *Inscripciones*.
 - Dos columnas opcionales de la hoja: `responsable` (se muestra en la tarjeta y en el detalle como «Responsable: …») e `inscripcio_url` (si un evento se inscribe en otra web, **Participar** es un enlace que la abre en una pestaña nueva y la tarjeta y el detalle no muestran recuento ni lista de ese evento). Ver *Editar los eventos*.
 - Enlace directo a un evento: `…/agenda-front-ampli/?e=<id>` abre su detalle al cargar. **Copia l’enllaç** (siempre visible en el detalle) copia ese enlace, sin `?admin`. Abrir o cerrar el detalle no cambia la barra de direcciones: el enlace se construye siempre con el `id` del evento.
 - **Descarrega la imatge** (en el detalle de los eventos que se pueden compartir: abiertos, con inscripciones cerradas o con URL externa) genera cada vez un PNG de 2048 × 1346 px con el título de la agenda, tipo, nombre, día, hora y lugar, y lo descarga como `agenda-<id>.png`. Mientras lo genera el botón dice «Generant…». Si falla, sale «No s’ha pogut generar la imatge».
@@ -24,7 +25,9 @@ Web estática, en catalán, con las acciones y actos de **noviembre de 2026** de
 ```
 Hoja de Google (la editas tú)  <──>  Apps Script (apps-script/Code.gs)  <──>  Web en GitHub Pages
  Esdeveniments, Inscripcions, Config      GET  ?action=agenda                      lee al abrir la página
+ (y Baixes, el archivo de bajas)
                                           POST {action:"signup"}                   escribe al apuntarse
+                                          POST {action:"unsignup"}                 borra la propia inscripción
 ```
 
 La web **no lleva los datos dentro**: los pide al abrirse. Cambiar un evento en la hoja se ve al recargar, sin recompilar ni volver a publicar.
@@ -96,9 +99,23 @@ Después, desde el móvil **con datos móviles** (no Wi-Fi) y desde el navegador
 
 **Entrega del responsable y la URL externa (R2).** Tras desplegar el script y escribir J1 y K1 (ver *Cómo publicar una entrega*), con la misma variable `URL` de arriba:
 
-1. **Lectura.** `curl -sL "$URL?action=agenda" | head -c 800`: cada evento de `events` debe traer `"responsable"` e `"inscripcio_url"` (con `""` si la celda está vacía) y la respuesta **no** debe traer `features` (llega con R4). Si no salen, el script de la implementación no es el de R2: revisa que la implementación use la versión nueva.
+1. **Lectura.** `curl -sL "$URL?action=agenda" | head -c 800`: cada evento de `events` debe traer `"responsable"` e `"inscripcio_url"` (con `""` si la celda está vacía) y la respuesta **no** debe traer `features` hasta que despliegues R4 (con R4 desplegado trae `"features":["unsignup"]`). Si no salen, el script de la implementación no es el de R2: revisa que la implementación use la versión nueva.
 2. **Latencia de `doGet`** (una vez). `curl -sL -o /dev/null -w '%{time_total}\n' "$URL?action=agenda"`. Si pasa de 3 s, hay que añadir una caché de `CacheService` de 30 s en el script (decisión del diseño; hasta entonces no hay caché). **Anótalo** en la línea *Resultado* de *Latencia de `doGet` (R2)*.
 3. **Datos de prueba en la hoja.** En una fila de prueba pon `Prova` en `responsable` y `https://example.org` en `inscripcio_url`. Recarga la web: la tarjeta muestra «Responsable: Prova», su **Participar** abre `example.org` en una pestaña nueva, no abre el modal y no hay recuento ni lista. Pon `Config!B1` en `NO` y comprueba que el enlace sigue funcionando; devuélvelo a `SI`. Borra la fila de prueba.
+
+**Entrega de la baja (R4).** Es la única entrega que **borra datos**. Hazla siempre primero en una copia del libro (ver *Cómo publicar una entrega → R4*). Con la variable `URL` de la copia y, después, la del libro real:
+
+1. **Lectura.** `curl -sL "$URL?action=agenda" | head -c 800`: la respuesta debe traer `"features":["unsignup"]` y **ningún** `request_id`.
+2. **Comprobación que no escribe.** Una baja con un `requestId` que no existe no debe borrar nada y debe responder `removed:false` (cambia `ID_DE_UN_EVENTO` por un id real; el `requestId` de ejemplo no existe porque los reales son aleatorios):
+
+   ```sh
+   curl -sL -H 'Content-Type: text/plain;charset=utf-8' \
+     --data '{"action":"unsignup","eventId":"ID_DE_UN_EVENTO","requestId":"no-existe-00000001"}' "$URL"
+   # → {"ok":true,"v":1,"eventId":"ID_DE_UN_EVENTO","names":[...],"removed":false}
+   ```
+
+   Si sale `"removed":true`, **no sigas**: el script no es el de R4 o está mal. Tampoco debe aparecer la pestaña `Baixes` por esta prueba. Ni una acción desconocida (`"action":"x"`) ni un `requestId` vacío o con caracteres raros deben borrar nada: dan `bad_request`.
+3. **Una baja real de prueba** (con datos móviles, en el navegador donde te apuntas): ver el último paso de *Cómo publicar una entrega → R4*.
 
 ## Editar los eventos
 
@@ -142,13 +159,15 @@ Si faltan J1 y K1, la agenda funciona igual y esos campos salen vacíos. Si los 
 
 ## Inscripciones
 
-- Pestaña **`Inscripcions`**: el script añade una fila por inscripción (`data_hora`, `event_id`, `nom`, `request_id`). Nunca la edita ni la borra.
-- **Borrar o corregir un nombre**: borra o edita la fila en la hoja. No hay otra vía.
-- **Cerrar las inscripciones**: pestaña `Config`, celda **B1** → `NO`. Vuelve a `SI` para abrirlas.
+- Pestaña **`Inscripcions`**: el script añade una fila por inscripción (`data_hora`, `event_id`, `nom`, `request_id`). Nunca la edita; solo borra una fila cuando la propia persona se desapunta (ver *Baja*).
+- **Baja (R4)**: quien se apuntó puede quitarse desde el mismo navegador. Al pulsar *Participar* en un evento abierto, el modal muestra «La teva participació» con su nombre y **Desapuntar-me**, que pide un segundo toque («Segur? Prem de nou», 5 s) antes de enviar. La web guarda en `localStorage` el `request_id` de cada inscripción: es el único «permiso» para borrarla, y `request_id` no sale nunca en la lectura pública (`?action=agenda`). Por eso la baja solo se ofrece en el navegador donde se hizo la inscripción: si la persona cambia de móvil, limpia los datos del navegador o usa otro, no ve el botón y la quitas tú a mano. Tampoco se ofrece en eventos pasados, cancelados, con inscripciones cerradas (`Config!B1` = `NO`) ni con URL externa, ni en el detalle.
+- **Pestaña `Baixes`** (se crea sola con la primera baja): antes de borrar la fila, el script copia `data_hora_baixa`, `event_id`, `nom` y `request_id` aquí. Es el archivo para deshacer una baja por error (copia la fila de vuelta a `Inscripcions`) o para ver quién se quitó. Nadie la lee ni la borra: contiene nombres, así que entra en la limpieza de *Cuando acabe noviembre*. El script busca la fila por `event_id` **y** `request_id` y la vuelve a comprobar justo antes de borrar: si mientras tanto reordenaste o editaste la hoja y esa fila ya no coincide, no borra nada y responde `removed:false`.
+- **Borrar o corregir un nombre a mano** (otro navegador, otro estado del evento, abuso): borra o edita la fila en la hoja. Lo que borras tú no se archiva en `Baixes`.
+- **Cerrar las inscripciones**: pestaña `Config`, celda **B1** → `NO`. Vuelve a `SI` para abrirlas. Con `NO` la web no ofrece la baja, pero el script la sigue aceptando con el `request_id` correcto.
 - **Límites** (en `Code.gs`): 150 inscritos por evento y 3000 en total.
 - **Duplicados**: se permiten y se cuentan. Dos personas pueden llamarse igual, así que no se deduplica por nombre. Si la respuesta del servidor se pierde y la web reintenta, el `request_id` evita que se escriba dos veces.
 - **Quién lo ve**: la lista de apuntados es pública para cualquiera que tenga el enlace (y la URL del script es pública, porque va en el código de la web). Es una decisión aceptada. El modal pide escribir solo el nombre de pila o un apodo. Con un grupo de unas 100 personas, un nombre de pila junto con un lugar y una hora puede identificar a alguien.
-- **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` y borra las filas desde la hoja.
+- **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` y borra las filas desde la hoja. La baja no abre otra vía de abuso: sin el `request_id` de una fila (que solo está en la hoja y en el navegador de quien se apuntó) no se puede borrar, y con uno inventado el script responde `removed:false` sin tocar nada.
 
 ## Backup y restauración del script
 
@@ -159,8 +178,8 @@ El código del script existe en dos sitios que nada obliga a mantener iguales: `
 1. **Anotar la versión en uso.** En *Implementar → Gestionar implementaciones*, apunta el número de versión N que usa la implementación de la web.
 2. **Capturar el estado real.** Copia el contenido de `Code.gs` y de `appsscript.json` del editor (allí el archivo se llama `Código.gs`) sobre los archivos de `apps-script/` y ejecuta `git diff` contra la última etiqueta (`git diff script-v1 -- apps-script/`). Sin diferencias, esa etiqueta ya es el backup. Con diferencias, haz commit «script: estado desplegado (versión N), antes de R2» (o R4) y crea la etiqueta siguiente: `git tag -a script-vK -m "script: estado desplegado (versión N)"`.
 3. **Desplegar.** *Gestionar implementaciones → ✎* de la implementación **cuyo ID coincide con el de la URL de la web** (`AGENDA_API_URL`) *→ Versión nueva*, con la descripción de la entrega. La URL `/exec` no cambia. Nunca *Nueva implementación*: crea otro ID y otra URL, y la web seguiría llamando al script antiguo.
-4. **Verificar la respuesta real** del script, no solo el editor (el editor puede ir por delante de lo desplegado): `curl -sL "$URL?action=agenda"` contra la URL de la web debe contener lo que cambia la entrega (R2: `responsable` e `inscripcio_url` en cada evento). Después, las comprobaciones de *Comprobaciones después de publicar* y las propias de la entrega.
-5. **Guardar lo desplegado.** Apunta el número de versión nuevo N' que muestra el editor, pega de nuevo el contenido del editor sobre `apps-script/` (`git diff` debe salir vacío) y crea la etiqueta sobre el commit con ese código: `git tag -a script-vK -m "script: desplegado R2 (versión N')"`. Las etiquetas no se suben solas: `git push origin script-vK`.
+4. **Verificar la respuesta real** del script, no solo el editor (el editor puede ir por delante de lo desplegado): `curl -sL "$URL?action=agenda"` contra la URL de la web debe contener lo que cambia la entrega (R2: `responsable` e `inscripcio_url` en cada evento; R4: `"features":["unsignup"]`). Después, las comprobaciones de *Comprobaciones después de publicar* y las propias de la entrega.
+5. **Guardar lo desplegado.** Apunta el número de versión nuevo N' que muestra el editor, pega de nuevo el contenido del editor sobre `apps-script/` (`git diff` debe salir vacío) y crea la etiqueta sobre el commit con ese código: `git tag -a script-vK -m "script: desplegado R2 o R4 (versión N')"`. Las etiquetas no se suben solas: `git push origin script-vK`.
 
 **Restauración si una entrega falla:**
 
@@ -186,6 +205,24 @@ La web se despliega con `git push` a `main` (el flujo de CI comprueba, prueba y 
 4. Comprobación de lectura y latencia (ver *Entrega del responsable y la URL externa (R2)*).
 5. `git push` a `main` y espera a que el CI publique.
 6. Rellena `responsable` e `inscripcio_url` en los eventos que los necesiten.
+
+**R4 (baja de la propia inscripción), paso a paso.** Borra datos: no te saltes ningún paso.
+
+1. **Backup del script** (pasos 1 y 2 de *Backup y restauración del script*): anota la versión N en uso y deja `apps-script/` igual que lo desplegado, con su etiqueta `script-vK`.
+2. **Copia de seguridad de `Inscripcions`** en el libro real: *Archivo → Descargar → Valores separados por comas (.csv)* con esa pestaña activa, y guarda el archivo fuera de Drive. Así, pase lo que pase, no pierdes ninguna inscripción.
+3. **PROBAR PRIMERO EN UNA COPIA DEL LIBRO.** *Archivo → Hacer una copia* del libro (copia también el script). En la copia: *Extensiones → Apps Script*, pega `apps-script/Code.gs`, *Implementar → Nueva implementación → Aplicación web* (ejecutar como tú, acceso *Cualquier usuario*) y usa **esa** URL como `URL` de los `curl`. Aquí sí vale una implementación nueva, porque es otra URL y la web no la usa. En la copia comprueba:
+   - `curl -sL "$URL?action=agenda"` trae `"features":["unsignup"]` y ningún `request_id`.
+   - Un `signup` con `curl` (ver *Comprobaciones después de publicar*) y su baja con el mismo `requestId` (`"action":"unsignup"`): la respuesta lleva `"removed":true`, la fila desaparece de `Inscripcions`, y en la pestaña `Baixes` (nueva) queda la fila con la hora, el evento, el nombre y el `request_id`.
+   - Repite exactamente la misma baja: ahora `"removed":false` y no cambia nada.
+   - La comprobación que no escribe (*Entrega de la baja (R4)*, punto 2) con un `requestId` que no existe: `"removed":false`.
+   - Con `Config!B1` en `NO`, la baja de otra inscripción de prueba funciona igual.
+   Si algo no sale como aquí, no sigas: el libro real no se ha tocado.
+4. **Desplegar en el libro real.** Pega `apps-script/Code.gs` en el editor del libro real y *Gestionar implementaciones → ✎ → Versión nueva* (pasos 3 a 5 de *Backup y restauración del script*; **nunca** *Nueva implementación*). No hace falta ejecutar `setup`: R4 no cambia las columnas de la hoja.
+5. **Verificar** contra la URL de la web: la lectura trae `"features":["unsignup"]` y la comprobación que no escribe (*Entrega de la baja (R4)*, punto 2) devuelve `"removed":false`.
+6. **Web:** `git push` a `main` y espera a que el CI publique. Hasta este momento la web antigua sigue funcionando con el script nuevo, que solo añade `features` y la acción `unsignup`.
+7. **Una baja real de prueba**, desde el móvil con datos móviles: abre la web, pulsa *Participar* en un evento abierto, apúntate como `Prova` y ciérralo. Vuelve a pulsar *Participar* en ese evento: debe salir «La teva participació» con `Prova`. Pulsa **Desapuntar-me** (cambia a «Segur? Prem de nou»), púlsalo de nuevo y debe salir «T’has desapuntat.»; el nombre desaparece de la lista, la fila de `Prova` desaparece de `Inscripcions` y aparece en `Baixes`. Después borra la fila de prueba de `Baixes`. Desde otro navegador, o en modo privado, el botón no debe aparecer.
+
+**Si R4 sale mal:** la web, con `git revert` y `git push`; el script, con la versión anterior en *Gestionar implementaciones* (la web de R4 tolera el script anterior: sin `features` no muestra la baja). La pestaña `Baixes` no hace falta tocarla. Si una baja se hizo por error, copia su fila de `Baixes` de vuelta a `Inscripcions` (`data_hora`, `event_id`, `nom`, `request_id`) o recupérala del CSV del paso 2.
 
 **No se despliegan juntos:** lectura (R2) y escritura destructiva (R4) en la misma versión del script; datos con URL externa en la hoja antes de que la web de R2 esté publicada (la web antigua los ignoraría y dejaría apuntarse en la agenda); quitar la lista del modal antes de que el detalle la muestre.
 
@@ -219,7 +256,7 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 - **Si se envía un nombre y la respuesta no llega**, la web no reenvía: vuelve a leer la lista y, si el nombre está, da la inscripción por hecha.
 - **Eventos pasados y cancelados**: se abre el detalle en solo lectura (se puede ver quién se apuntó, no apuntarse; sin *Participar*). Con las inscripciones cerradas (`Config!B1` = `NO`) pasa lo mismo, con el aviso «Les inscripcions estan tancades». Las tarjetas pasadas se ven en grises.
 - **Botón Atrás en Android**: el detalle y el modal de inscripción son `<dialog>` nativos. No se ha tocado el historial del navegador, así que el comportamiento depende del navegador: en Chrome reciente Atrás cierra el diálogo (igual que Esc); en otros puede volver a la página anterior. Hay un botón *Tanca* siempre visible. *Resultado en Android:* pendiente de comprobar.
-- **Navegador interno de WhatsApp (S3)**: decide si se construye la baja de inscripción (que solo funciona si `localStorage` se conserva al cerrar y volver a abrir el enlace). *Resultado:* pendiente de comprobar (ver *Comprobaciones después de publicar*).
+- **Navegador interno de WhatsApp (S3)**: decide si se construye la baja de inscripción (que solo funciona si `localStorage` se conserva al cerrar y volver a abrir el enlace). *Resultado:* `localStorage` se conserva al cerrar y volver a abrir el enlace (lo comprobó el autor); R4 se construyó.
 - **Imagen (S1)**: el PNG se genera en el navegador con `html-to-image` (versión exacta `1.11.13`) a 2048 × 1346 px, con una sola fuente (Special Gothic Condensed One) y `pixelRatio: 1`. Si la fuente no se carga o el resultado sale vacío (se repinta una vez), o pasan 20 s, el botón vuelve a reposo con «No s’ha pogut generar la imatge». Un nombre de más de cuatro líneas o un lugar de más de tres se corta con `line-clamp`; en el Chrome actual la librería pierde los puntos suspensivos de `line-clamp` (el texto se corta en seco, dentro de la imagen). *Resultado en iPhone antiguo:* pendiente de comprobar. *Resultado en Android de gama baja:* pendiente de comprobar (ver *Comprobaciones después de publicar*).
 - **WhatsApp y el texto con la imagen (S2)**: *Comparteix* envía la imagen y el texto en un solo `navigator.share`, pero lo que hace WhatsApp con el texto junto a una imagen adjunta depende de la app y no se puede probar desde el entorno de desarrollo. Si no lo conserva, es un límite conocido: la persona usa *Copia l’enllaç* y pega el enlace. *Resultado en iPhone:* pendiente de comprobar. *Resultado en Android:* pendiente de comprobar (ver *Comprobaciones después de publicar*). R3b se construyó antes de S1 y S2; si salen mal, se revierten R3b y R3a con `git revert` y R3 sigue la regla de S1 (canvas o descartar).
 - **No se indexa**: `noindex` en `src/app.html` y `robots.txt`.
@@ -231,5 +268,5 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 ## Cuando acabe noviembre
 
 1. `Config!B1` → `NO`.
-2. Descarga o borra la pestaña `Inscripcions` (son datos de personas).
+2. Descarga o borra las pestañas `Inscripcions` y `Baixes` (son datos de personas).
 3. Si no se va a reutilizar: en Apps Script, *Implementar → Gestionar implementaciones → Archivar*, y desactiva GitHub Pages o borra el repositorio.
