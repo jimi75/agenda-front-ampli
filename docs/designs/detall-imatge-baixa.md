@@ -235,13 +235,15 @@ idle ──toque──► generando ──ok──► share({files, text}) ─�
                    │                    └─ otro error / sin
                    │                       soporte de archivos ──► respaldo: descarga la imagen +
                    │                                                enlace wa.me solo con texto + aviso
-                   └─ error al generar ──► idle + mensaje «No s’ha pogut generar la imatge»
+                   └─ error al generar ──► idle + mensaje «No s’ha pogut generar la imatge» +
+                                           enlace wa.me solo con texto (sin descarga: no hay imagen)
 
 preparada ──toque──► share({files, text}) llamado sin await previo ──► idle / respaldo
                      (un segundo NotAllowedError va al respaldo; nunca vuelve a «preparada»)
 ```
 
 *   **Respaldo.** `wa.me` se muestra como un `<a target="_blank" rel="noopener noreferrer">` real con `?text=` codificado, no con `window.open`. «Copia l’enllaç» copia la URL del detalle; si el portapapeles falla, muestra la URL en un campo seleccionable.
+*   **Sin regresión respecto a R1.** R1 ya permite compartir el texto por WhatsApp. Si la imagen no se puede generar en un móvil (justo lo que mide el spike S1), «Comparteix» no puede quedar peor que en R1: además del mensaje de error muestra el mismo enlace `wa.me` de solo texto.
 *   **Toques repetidos.** Mientras se genera, el botón está desactivado y los toques extra se ignoran.
 
 ### Baja de inscripción en el navegador
@@ -289,7 +291,7 @@ El script se actualiza siempre primero y siempre de forma aditiva. La web se des
 | **R3** web (opcional) | 23 de noviembre | Imagen, descarga y «Comparteix» con archivo (`html-to-image`). Empieza con el spike S1. | No | `git revert` |
 | **R4** script, luego web (opcional) | 26 de noviembre | Antes: backup del script. Script: rama `unsignup` y `Baixes`. Después la web muestra «Desapuntar-me» si `features` incluye `unsignup`. Se prueba antes en una copia del libro, con copia de seguridad de `Inscripcions`. Empieza con el spike S3. | Sí | Volver a la versión anterior o restaurar el commit de backup (los nombres borrados quedan en `Baixes`) |
 
-**Corte.** El mínimo es R1 más R2. R3 y R4 son opcionales. Si el spike S1 falla o R3 no está lista el 23 de noviembre, R3 se descarta (queda el compartir con texto de R1). Si el spike S3 falla o R4 no está lista el 26 de noviembre, R4 se descarta. El orden de recorte es primero R4 y después R3. Las fechas son una propuesta del plan; el autor las ajusta. R1 lleva consigo el compartir con texto para que la petición principal de difusión llegue en la primera entrega.
+**Corte.** El mínimo es R1 más R2. R3 y R4 son opcionales. Si el spike S1 falla o R3 no está lista el 23 de noviembre, R3 se descarta (queda el compartir con texto de R1). Si el spike S3 falla o R4 no está lista el 26 de noviembre, R4 se descarta. El orden de recorte es primero R4 y después R3. Las fechas son una propuesta del plan; el autor las ajusta. R1 lleva consigo el compartir con texto para que la petición principal de difusión llegue en la primera entrega. **Decisión del autor (12 de noviembre):** R3b se construye antes de tener los resultados de S1 y S2, porque no dispone ahora de los móviles de prueba. R3a ya está publicada y S1 sigue pendiente. Si más adelante S1 o S2 salen mal, R3b y R3a se revierten con `git revert` y R3 pasa a la regla de las Open Questions (canvas, o descartar R3). Mientras tanto, «Comparteix» no puede quedar peor que el compartir con texto de R1 (ver «Sin regresión respecto a R1»).
 
 No se despliegan juntos: lectura (R2) y escritura destructiva (R4) en la misma versión del script; datos con URL externa en la hoja antes de que la web de R2 esté publicada; quitar la lista del modal antes de que el detalle la muestre.
 
