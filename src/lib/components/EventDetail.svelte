@@ -1,8 +1,10 @@
 <script>
 	import { tick } from 'svelte';
 	import { formatRange } from '#lib/events.js';
-	import { copyText, shareText, waLink } from '#lib/share.js';
+	import { renderPoster } from '#lib/poster.js';
+	import { copyText, downloadFile, shareText, waLink } from '#lib/share.js';
 	import { T } from '#lib/texts.js';
+	import PosterView from './PosterView.svelte';
 
 	/**
 	 * @type {{
@@ -27,7 +29,11 @@
 	let linkField = $state();
 	/** @type {'idle' | 'copied' | 'failed'} */
 	let copyState = $state('idle');
-
+	let generating = $state(false);
+	let imageFailed = $state(false);
+	let posterVisible = $state(false);
+	/** @type {HTMLElement | undefined} */
+	let posterNode = $state();
 	const visible = $derived(event !== null || notFound);
 	const canShare = $derived(participation === 'open' || participation === 'closed' || participation === 'external');
 
@@ -36,6 +42,7 @@
 		if (!dialog) return;
 		if (visible && !dialog.open) {
 			copyState = 'idle';
+			imageFailed = false;
 			dialog.showModal();
 			tick().then(() => closeButton?.focus());
 		} else if (!visible && dialog.open) {
@@ -49,6 +56,25 @@
 			await tick();
 			linkField?.focus();
 			linkField?.select();
+		}
+	}
+
+	/** The poster is mounted only while it is generated, and the image is rendered again on every tap. */
+	async function download() {
+		if (generating || !event) return;
+		const { id } = event;
+		generating = true;
+		imageFailed = false;
+		posterVisible = true;
+		try {
+			await tick();
+			if (!posterNode) throw new Error('image_failed');
+			downloadFile(await renderPoster(posterNode, id));
+		} catch {
+			imageFailed = true;
+		} finally {
+			posterVisible = false;
+			generating = false;
 		}
 	}
 
@@ -131,12 +157,21 @@
 
 				{#if canShare}
 					<section class="share">
+						<button type="button" class="action" disabled={generating} onclick={download}>
+							{generating ? T.share.generating : T.share.download}
+						</button>
 						<a class="action" href={waLink(shareText(url))} target="_blank" rel="noopener noreferrer"
 							>{T.share.share}<span class="sr-only"> {T.newTab}</span></a
 						>
 						<button type="button" class="action" onclick={copy}>{T.share.copyLink}</button>
 						<p class="live" aria-live="polite">
-							{copyState === 'copied' ? T.share.copied : copyState === 'failed' ? T.share.copyFailed : ''}
+							{imageFailed
+								? T.share.imageFailed
+								: copyState === 'copied'
+									? T.share.copied
+									: copyState === 'failed'
+										? T.share.copyFailed
+										: ''}
 						</p>
 						{#if copyState === 'failed'}
 							<input
@@ -155,6 +190,9 @@
 				<p id="detail-title" class="not-found">{T.detail.notFound}</p>
 			{/if}
 		</div>
+		{#if event && posterVisible}
+			<PosterView {event} {dateLabel} bind:node={posterNode} />
+		{/if}
 	{/if}
 </dialog>
 
@@ -387,6 +425,11 @@
 		font: 700 0.95rem/1 var(--font-text);
 		text-decoration: none;
 		cursor: pointer;
+	}
+
+	.action:disabled {
+		opacity: 0.6;
+		cursor: progress;
 	}
 
 	.live {

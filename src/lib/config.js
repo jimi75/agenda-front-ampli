@@ -20,3 +20,6 @@ export const REQUEST_TIMEOUT_MS = 15000;
 export const STORAGE_KEY = 'agenda-sants-montjuic-2026-11';
 
 export const MY_SIGNUPS_KEY = 'agenda-sants-montjuic-2026-11:mine';
+
+// The poster is drawn at exactly this size, in CSS pixels, with `pixelRatio: 1`.
+export const POSTER = Object.freeze({ width: 2048, height: 1346 });

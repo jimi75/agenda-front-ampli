@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detailUrl, copyText, shareText, waLink } from './share.js';
+import { detailUrl, copyText, downloadFile, shareText, waLink } from './share.js';
 import { T } from './texts.js';
 
 test('detailUrl: origen + ruta + ?e=, sense arrossegar ?admin ni altres paràmetres', () => {
@@ -53,4 +53,49 @@ test('copyText: èxit, error i sense portaretalls', async () => {
 	assert.equal(await copyText('x', failing), false);
 	assert.equal(await copyText('x', {}), false);
 	assert.equal(await copyText('x', /** @type {any} */ (null)), false);
+});
+
+/** A document, URL and timers that record what downloadFile does. @param {boolean} supportsDownload */
+function fakeEnv(supportsDownload) {
+	/** @type {string[]} */
+	const log = [];
+	/** @type {Array<() => void>} */
+	const timers = [];
+	/** @type {Record<string, any>} */
+	const link = {
+		click: () => log.push(`click ${link.href} ${link.download}`),
+		remove: () => log.push('remove')
+	};
+	if (supportsDownload) link.download = '';
+	const env = {
+		document: {
+			createElement: () => link,
+			body: { append: (/** @type {unknown} */ node) => log.push(node === link ? 'append' : 'append?') }
+		},
+		URL: {
+			createObjectURL: () => 'blob:fake-1',
+			revokeObjectURL: (/** @type {string} */ url) => void log.push(`revoke ${url}`)
+		},
+		open: (/** @type {string} */ url, /** @type {string} */ target, /** @type {string} */ features) =>
+			void log.push(`open ${url} ${target} ${features}`),
+		setTimeout: (/** @type {() => void} */ callback) => void timers.push(callback)
+	};
+	return { env: /** @type {any} */ (env), log, timers };
+}
+
+test('downloadFile: <a download> temporal sobre una URL d’objecte, revocada després', () => {
+	const { env, log, timers } = fakeEnv(true);
+	downloadFile(new File(['x'], 'agenda-a1.png', { type: 'image/png' }), env);
+	assert.deepEqual(log, ['append', 'click blob:fake-1 agenda-a1.png', 'remove']);
+	assert.equal(timers.length, 1);
+	timers[0]();
+	assert.equal(log.at(-1), 'revoke blob:fake-1');
+});
+
+test('downloadFile: sense suport de download obre la URL en una pestanya nova', () => {
+	const { env, log, timers } = fakeEnv(false);
+	downloadFile(new File(['x'], 'agenda-a1.png', { type: 'image/png' }), env);
+	assert.deepEqual(log, ['open blob:fake-1 _blank noopener']);
+	timers[0]();
+	assert.equal(log.at(-1), 'revoke blob:fake-1');
 });
