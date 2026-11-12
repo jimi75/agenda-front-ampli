@@ -39,7 +39,7 @@
 	let detailId = $state(null);
 	/** @type {string | null} */
 	let signupId = $state(null);
-	/** This browser's own signups: only a count for `?admin` until the unsignup arrives. */
+	/** This browser's own signups (the secret of an unsignup lives here); re-read after every signup or unsignup. */
 	let mine = $state.raw(/** @type {import('#lib/my-signups.js').MySignup[]} */ ([]));
 	let today = $state('');
 	let showAdmin = $state(false);
@@ -142,6 +142,17 @@
 			data = { ...data, signups: new Map(data.signups).set(id, result.names) };
 		} else if (result.error === 'closed') {
 			data = { ...data, signupsOpen: false };
+		}
+		return result;
+	}
+
+	/** @param {string} eventId @param {string} requestId @returns {Promise<import('#lib/api.js').UnsignResult>} */
+	async function unsignup(eventId, requestId) {
+		if (!api) return { ok: false, error: 'server' };
+		const result = await api.unsignup(eventId, requestId);
+		mine = readMine(browserStorage());
+		if (result.ok && data) {
+			data = { ...data, signups: new Map(data.signups).set(eventId, result.names) };
 		}
 		return result;
 	}
@@ -253,7 +264,9 @@
 	event={signupEvent}
 	dateLabel={dateLabelOf(signupEvent)}
 	features={data?.features ?? []}
+	mine={signupId ? mine.filter((item) => item.eventId === signupId) : []}
 	onsubmit={signup}
+	onunsign={unsignup}
 	onclose={() => (signupId = null)}
 />
 

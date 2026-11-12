@@ -10,11 +10,15 @@
 	 *   event: import('#lib/events.js').AgendaEvent | null,
 	 *   dateLabel: string,
 	 *   features: string[],
+	 *   mine: import('#lib/my-signups.js').MySignup[],
 	 *   onsubmit: (name: string) => Promise<import('#lib/api.js').SignupResult>,
+	 *   onunsign: (eventId: string, requestId: string) => Promise<import('#lib/api.js').UnsignResult>,
 	 *   onclose: () => void
 	 * }}
 	 */
-	let { event, dateLabel, features, onsubmit, onclose } = $props();
+	let { event, dateLabel, features, mine, onsubmit, onunsign, onclose } = $props();
+
+	const CONFIRM_MS = 5000;
 
 	/** @type {HTMLDialogElement | undefined} */
 	let dialog = $state();
@@ -24,20 +28,66 @@
 	/** @type {'idle' | 'sending' | 'done'} */
 	let phase = $state('idle');
 	let error = $state('');
+	/** The record whose «Desapuntar-me» is waiting for the second tap. */
+	let confirming = $state('');
+	/** The record being removed: while set, no other removal starts. */
+	let unsigning = $state('');
+	let unsignMessage = $state('');
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	let confirmTimer;
+	// Bumped on every open: the answer of a removal started in an earlier opening is ignored.
+	let opening = 0;
+
+	const showMine = $derived(features.includes('unsignup') && (mine.length > 0 || unsignMessage !== ''));
+
+	function clearConfirm() {
+		clearTimeout(confirmTimer);
+		confirming = '';
+	}
 
 	// The parent owns "which event is open"; this effect keeps the native dialog in sync.
 	$effect(() => {
 		if (!dialog) return;
 		if (event && !dialog.open) {
+			opening += 1;
 			name = '';
 			phase = 'idle';
 			error = '';
+			unsigning = '';
+			unsignMessage = '';
+			clearConfirm();
 			dialog.showModal();
 			tick().then(() => input?.focus());
 		} else if (!event && dialog.open) {
 			dialog.close();
 		}
 	});
+
+	$effect(() => () => clearTimeout(confirmTimer));
+
+	/** @param {string} requestId */
+	async function unsign(requestId) {
+		const eventId = event?.id;
+		if (!eventId || unsigning) return;
+		if (confirming !== requestId) {
+			clearConfirm();
+			confirming = requestId;
+			confirmTimer = setTimeout(() => (confirming = ''), CONFIRM_MS);
+			return;
+		}
+		clearConfirm();
+		unsigning = requestId;
+		unsignMessage = '';
+		const current = opening;
+		const result = await onunsign(eventId, requestId);
+		if (current !== opening) return;
+		unsigning = '';
+		if (!result.ok) {
+			unsignMessage = T.signupErrors[result.error] ?? T.signupErrors.server;
+		} else {
+			unsignMessage = result.removed ? T.participation.unsignDone : T.participation.alreadyGone;
+		}
+	}
 
 	/** @param {SubmitEvent} submitEvent */
 	async function submit(submitEvent) {
@@ -110,6 +160,32 @@
 						{phase === 'sending' ? T.dialog.sending : T.dialog.submit}
 					</button>
 				</form>
+			{/if}
+			{#if showMine}
+				<section class="mine" aria-labelledby="mine-title">
+					<h3 id="mine-title">{T.participation.mine}</h3>
+					{#if unsignMessage}<p class="unsign-result" role="status">{unsignMessage}</p>{/if}
+					<ul>
+						{#each mine as item (item.requestId)}
+							<li>
+								<span class="who">{item.name}</span>
+								<button
+									type="button"
+									class="unsign"
+									class:confirm={confirming === item.requestId}
+									disabled={unsigning !== ''}
+									onclick={() => unsign(item.requestId)}
+								>
+									{unsigning === item.requestId
+										? T.participation.unsigning
+										: confirming === item.requestId
+											? T.participation.unsignConfirm
+											: T.participation.unsign}
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</section>
 			{/if}
 		</div>
 	{/if}
@@ -270,5 +346,68 @@
 	.hint {
 		margin: 0.75rem 0 0;
 		font-size: 0.85rem;
+	}
+
+	.mine {
+		margin-top: 1.25rem;
+		padding-top: 0.9rem;
+		border-top: 2px solid var(--rust);
+	}
+
+	h3 {
+		margin: 0 0 0.5rem;
+		font-family: var(--font-display);
+		font-weight: 400;
+		font-synthesis: none;
+		font-size: 1.3rem;
+		text-transform: uppercase;
+		color: var(--rust);
+	}
+
+	.unsign-result {
+		margin: 0 0 0.5rem;
+		font-weight: 700;
+		color: var(--rust);
+	}
+
+	ul {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	li {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.3rem 0;
+	}
+
+	.who {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.unsign {
+		flex: none;
+		min-height: 44px;
+		padding: 0 0.9rem;
+		border: 2px solid var(--rust);
+		border-radius: 4px;
+		background: transparent;
+		color: var(--rust);
+		font: 700 0.9rem/1 var(--font-text);
+		cursor: pointer;
+	}
+
+	.unsign.confirm {
+		background: var(--rust);
+		color: var(--lime);
+	}
+
+	.unsign:disabled {
+		opacity: 0.7;
+		cursor: progress;
 	}
 </style>
