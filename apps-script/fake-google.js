@@ -16,9 +16,14 @@ function display(value) {
 }
 
 class FakeSheet {
-	/** @param {any[][]} rows */
-	constructor(rows = []) {
+	/**
+	 * @param {any[][]} rows
+	 * @param {(readNumber: number) => void} [onRead] called when a read (getDataRange) starts
+	 */
+	constructor(rows = [], onRead) {
 		this.rows = rows;
+		this.onRead = onRead;
+		this.reads = 0;
 		this.frozenRows = 0;
 		this.validations = [];
 		this.protections = [];
@@ -59,7 +64,13 @@ class FakeSheet {
 		this.frozenRows = n;
 	}
 
+	/** Removes row n (1-based); the rows below move up one position, as in Sheets. */
+	deleteRow(n) {
+		this.rows.splice(n - 1, 1);
+	}
+
 	getDataRange() {
+		this.onRead?.(++this.reads);
 		const width = this.#width();
 		const padded = this.rows.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ''));
 		return {
@@ -141,14 +152,20 @@ const chain = (calls) => {
 
 /**
  * Loads apps-script/Code.gs into a VM with fake Google services.
- * @param {{ events?: any[][], signups?: any[][], config?: string | null, now?: Date, lockFails?: boolean }} [options]
+ * `beforeRead(sheetName, readNumber)` is called when the Nth read (getDataRange) of a sheet starts,
+ * before it takes its snapshot: a test can use it to move rows between two reads of the script.
+ * `logs` collects what the script writes with console.log (console.error still goes to the console).
+ * @param {{ events?: any[][], signups?: any[][], config?: string | null, now?: Date, lockFails?: boolean,
+ *   beforeRead?: (sheetName: string, readNumber: number) => void }} [options]
  */
-export function createScript({ events, signups, config = 'SI', now = new Date('2026-11-10T09:30:00Z'), lockFails = false } = {}) {
+export function createScript({ events, signups, config = 'SI', now = new Date('2026-11-10T09:30:00Z'), lockFails = false, beforeRead } = {}) {
 	const sheets = new Map();
-	if (events) sheets.set('Esdeveniments', new FakeSheet(events));
-	if (signups) sheets.set('Inscripcions', new FakeSheet(signups));
-	if (config !== null) sheets.set('Config', new FakeSheet([['inscripcions_obertes', config]]));
+	const create = (name, rows) => new FakeSheet(rows, (readNumber) => beforeRead?.(name, readNumber));
+	if (events) sheets.set('Esdeveniments', create('Esdeveniments', events));
+	if (signups) sheets.set('Inscripcions', create('Inscripcions', signups));
+	if (config !== null) sheets.set('Config', create('Config', [['inscripcions_obertes', config]]));
 
+	const logs = [];
 	const state = { lockReleased: 0, lockAttempts: 0, failSpreadsheet: false, validationCalls: [] };
 	const spreadsheet = {
 		getSpreadsheetTimeZone: () => 'Europe/Madrid',
@@ -157,7 +174,7 @@ export function createScript({ events, signups, config = 'SI', now = new Date('2
 			return sheets.get(name) ?? null;
 		},
 		insertSheet: (name) => {
-			const sheet = new FakeSheet();
+			const sheet = create(name);
 			sheets.set(name, sheet);
 			return sheet;
 		}
@@ -170,7 +187,8 @@ export function createScript({ events, signups, config = 'SI', now = new Date('2
 	});
 
 	const context = {
-		console,
+		// error stays the real one (tests silence it by replacing console.error); log is collected.
+		console: { log: (...args) => logs.push(args.join(' ')), error: (...args) => console.error(...args) },
 		Date: FixedDate,
 		SpreadsheetApp: {
 			getActiveSpreadsheet: () => spreadsheet,
@@ -235,7 +253,7 @@ export function createScript({ events, signups, config = 'SI', now = new Date('2
 			context.doPost({ postData: { contents: typeof body === 'string' ? body : JSON.stringify(body) } }).getContent()
 		);
 
-	return { context, sheets, state, get, post };
+	return { context, sheets, state, logs, get, post };
 }
 
 export const EVENT_HEADER = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];

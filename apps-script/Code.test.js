@@ -53,7 +53,7 @@ test('doGet: una full d’11 columnes torna responsable i inscripcio_url de cada
 		[['a1', 'Marta', 'https://example.org/inscripcio'], ['b2', '', '']]
 	);
 	assert.equal(agenda.events[0].nom, 'Paradeta', 'les columnes de sempre es llegeixen igual');
-	assert.equal('features' in agenda, false, 'features no existeix fins a R4');
+	assert.deepEqual(agenda.features, ['unsignup']);
 	assert.equal(script.post(request('a1', 'Eva')).ok, true, 'signup funciona amb les columnes noves');
 });
 
@@ -339,4 +339,276 @@ test('setup(): creates the three tabs with headers and never overwrites existing
 	script.context.setup();
 	assert.equal(script.sheets.get('Esdeveniments').rows.length, 2);
 	assert.equal(script.sheets.get('Config').rows[0][1], 'NO');
+});
+
+// ---- R4: signup is unchanged, unsignup is new ----
+
+test('doPost: el reenviament amb el mateix requestId al topall de 150 dona el mateix resultat de sempre', () => {
+	const rows = Array.from({ length: 149 }, (_, i) => ['t', 'a1', `Nom${i}`, `req-full-${i}`]);
+	const script = setup({ signups: [SIGNUP_HEADER, ...rows] });
+	const body = request('a1', 'El cent cinquanta');
+	const first = script.post(body);
+	assert.equal(first.ok, true);
+	assert.equal(first.names.length, 150);
+	// The request already reached the sheet: it is not counted against the cap again.
+	assert.deepEqual(script.post(body), first);
+	assert.equal(script.sheets.get('Inscripcions').rows.length, 151);
+	assert.deepEqual(script.post(request('a1', 'Un més')), { ok: false, v: 1, error: 'event_full' });
+	assert.equal(script.sheets.get('Inscripcions').rows.length, 151);
+});
+
+test('doPost: una acció desconeguda és bad_request i no pren el lock ni escriu res', () => {
+	const script = setup();
+	for (const action of ['delete', 'unsign', 'UNSIGNUP', 'Signup', '', undefined, 1, null, {}]) {
+		const answer = script.post({ action, eventId: 'a1', requestId: 'req-00000001', name: 'Eva' });
+		assert.deepEqual(answer, { ok: false, v: 1, error: 'bad_request' }, String(action));
+	}
+	assert.equal(script.post('null').error, 'bad_request');
+	assert.equal(script.post('[]').error, 'bad_request');
+	assert.equal(script.state.lockAttempts, 0);
+	assert.equal(script.sheets.get('Inscripcions').rows.length, 2);
+	assert.equal(script.sheets.has('Baixes'), false);
+});
+
+const R_EVA = 'req-eva-0001';
+const R_PAU = 'req-pau-0002';
+const R_ANNA = 'req-anna-0003';
+const R_BEA = 'req-bea-0004';
+const stamp = (n) => `2026-11-0${n}T10:00:00`;
+const signupRows = () => [
+	SIGNUP_HEADER,
+	[stamp(1), 'a1', 'Eva', R_EVA],
+	[stamp(2), 'a1', 'Pau', R_PAU],
+	[stamp(3), 'b2', 'Anna', R_ANNA],
+	[stamp(4), 'a1', 'Bea', R_BEA]
+];
+const setupR4 = (options = {}) => setup({ signups: signupRows(), ...options });
+const unsign = (eventId, requestId, extra = {}) => ({ action: 'unsignup', eventId, requestId, ...extra });
+const inscripcions = (script) => script.sheets.get('Inscripcions').rows;
+
+test('doGet: torna features i mai cap request_id (ni a events ni a signups)', () => {
+	const agenda = setupR4().get({ action: 'agenda' });
+	assert.deepEqual(agenda.features, ['unsignup']);
+	assert.deepEqual(agenda.signups, { a1: ['Eva', 'Pau', 'Bea'], b2: ['Anna'] });
+	const text = JSON.stringify(agenda);
+	assert.ok(!text.includes('request_id'));
+	for (const id of [R_EVA, R_PAU, R_ANNA, R_BEA]) assert.ok(!text.includes(id), id);
+});
+
+test('unsignup: esborra només la fila amb aquest event_id i request_id i torna names i removed:true', () => {
+	const script = setupR4();
+	const answer = script.post(unsign('a1', R_PAU));
+	assert.deepEqual(answer, { ok: true, v: 1, eventId: 'a1', names: ['Eva', 'Bea'], removed: true });
+	assert.deepEqual(inscripcions(script), [
+		SIGNUP_HEADER,
+		[stamp(1), 'a1', 'Eva', R_EVA],
+		[stamp(3), 'b2', 'Anna', R_ANNA],
+		[stamp(4), 'a1', 'Bea', R_BEA]
+	]);
+	assert.equal(script.state.lockReleased, 1);
+	assert.deepEqual(script.get({ action: 'agenda' }).signups, { a1: ['Eva', 'Bea'], b2: ['Anna'] });
+});
+
+test('unsignup: la primera i l’última fila de dades també es poden esborrar', () => {
+	const script = setupR4();
+	assert.equal(script.post(unsign('a1', R_EVA)).removed, true);
+	assert.equal(script.post(unsign('a1', R_BEA)).removed, true);
+	assert.deepEqual(inscripcions(script).map((r) => r[2]), ['nom', 'Pau', 'Anna']);
+});
+
+test('unsignup: arxiva el nom a Baixes, que es crea al vol amb capçalera, i en text', () => {
+	const script = setupR4();
+	assert.equal(script.sheets.has('Baixes'), false);
+	script.post(unsign('a1', R_PAU));
+	const archive = script.sheets.get('Baixes').rows;
+	assert.deepEqual(archive[0], ['data_hora_baixa', 'event_id', 'nom', 'request_id']);
+	assert.deepEqual(archive.slice(1), [['2026-11-10T10:30:00', 'a1', 'Pau', R_PAU]]);
+	assert.ok(archive.flat().every((cell) => typeof cell === 'string'));
+	assert.equal(script.sheets.get('Baixes').frozenRows, 1);
+
+	script.post(unsign('b2', R_ANNA));
+	const again = script.sheets.get('Baixes').rows;
+	assert.equal(again.length, 3, 'una sola capçalera i una fila per baixa');
+	assert.deepEqual(again[2].slice(1), ['b2', 'Anna', R_ANNA]);
+});
+
+test('unsignup: usa la pestanya Baixes que ja existeix sense tocar-ne el contingut', () => {
+	const script = setupR4();
+	script.post(unsign('a1', R_PAU));
+	const before = structuredClone(script.sheets.get('Baixes').rows);
+	script.post(unsign('a1', R_EVA));
+	assert.deepEqual(script.sheets.get('Baixes').rows.slice(0, before.length), before);
+});
+
+test('unsignup: un request_id buit no esborra res (ni per doPost ni per la funció directa)', () => {
+	const script = setupR4({
+		signups: [...signupRows(), [stamp(5), 'a1', 'Sense id', ''], [stamp(6), 'a1', 'Altre sense id', '']]
+	});
+	const before = structuredClone(inscripcions(script));
+	for (const requestId of ['', '   ', undefined, null, 7, 'x', 'a b c d e f g h', 'x'.repeat(65)]) {
+		assert.deepEqual(script.post(unsign('a1', requestId)), { ok: false, v: 1, error: 'bad_request' }, String(requestId));
+	}
+	assert.deepEqual(inscripcions(script), before);
+	assert.equal(script.state.lockAttempts, 0, 'les peticions invàlides es rebutgen abans del lock');
+
+	// Defence in depth: even if an empty id got past doPost, rows without request_id never match.
+	const ss = script.context.SpreadsheetApp.getActiveSpreadsheet();
+	const answer = JSON.parse(script.context.unsignup_({ eventId: 'a1', requestId: '' }, ss, 'Europe/Madrid').getContent());
+	assert.equal(answer.removed, false);
+	assert.deepEqual(answer.names, ['Eva', 'Pau', 'Bea', 'Sense id', 'Altre sense id']);
+	assert.deepEqual(inscripcions(script), before);
+	assert.equal(script.sheets.has('Baixes'), false);
+});
+
+test('unsignup: un eventId inexistent o massa llarg i un request_id d’un altre esdeveniment no esborren res', () => {
+	const script = setupR4();
+	const before = structuredClone(inscripcions(script));
+	// R_ANNA belongs to b2: asking for it with a1 (or any other event) finds nothing.
+	assert.deepEqual(script.post(unsign('a1', R_ANNA)), {
+		ok: true, v: 1, eventId: 'a1', names: ['Eva', 'Pau', 'Bea'], removed: false
+	});
+	assert.equal(script.post(unsign('b2', R_EVA)).removed, false);
+	assert.equal(script.post(unsign('a1', 'req-no-existeix')).removed, false);
+	assert.equal(script.post(unsign('x'.repeat(21), R_EVA)).error, 'bad_request');
+	assert.equal(script.post(unsign('', R_EVA)).error, 'bad_request');
+	assert.equal(script.post(unsign(undefined, R_EVA)).error, 'bad_request');
+	assert.deepEqual(inscripcions(script), before);
+	assert.equal(script.sheets.has('Baixes'), false);
+});
+
+test('unsignup: és idempotent (la segona vegada removed:false i una sola fila a Baixes)', () => {
+	const script = setupR4();
+	assert.equal(script.post(unsign('a1', R_PAU)).removed, true);
+	const second = script.post(unsign('a1', R_PAU));
+	assert.deepEqual(second, { ok: true, v: 1, eventId: 'a1', names: ['Eva', 'Bea'], removed: false });
+	assert.equal(inscripcions(script).length, 4);
+	assert.equal(script.sheets.get('Baixes').rows.length, 2);
+	assert.equal(script.state.lockReleased, 2);
+});
+
+test('unsignup: funciona amb les inscripcions tancades (B1 = NO)', () => {
+	const script = setupR4({ config: 'NO' });
+	assert.equal(script.post(unsign('a1', R_PAU)).removed, true);
+	assert.deepEqual(script.post(request('a1', 'Nou')), { ok: false, v: 1, error: 'closed' });
+	assert.deepEqual(inscripcions(script).map((r) => r[2]), ['nom', 'Eva', 'Anna', 'Bea']);
+});
+
+test('unsignup: funciona amb un esdeveniment que ja no és a la fulla Esdeveniments', () => {
+	const script = setupR4({ signups: [...signupRows(), [stamp(7), 'esborrat', 'Fantasma', 'req-fantasma-1']] });
+	assert.equal(script.get({ action: 'agenda' }).signups.esborrat, undefined);
+	const answer = script.post(unsign('esborrat', 'req-fantasma-1'));
+	assert.deepEqual(answer, { ok: true, v: 1, eventId: 'esborrat', names: [], removed: true });
+	assert.equal(script.sheets.get('Baixes').rows[1][2], 'Fantasma');
+	assert.equal(inscripcions(script).length, 5);
+});
+
+test('unsignup: busy si el lock està agafat i res no canvia; el lock s’allibera sempre si es va agafar', () => {
+	const busy = setupR4({ lockFails: true });
+	const before = structuredClone(inscripcions(busy));
+	assert.deepEqual(busy.post(unsign('a1', R_PAU)), { ok: false, v: 1, error: 'busy' });
+	assert.deepEqual(inscripcions(busy), before);
+	assert.equal(busy.sheets.has('Baixes'), false);
+	assert.equal(busy.state.lockReleased, 0);
+
+	const ok = setupR4();
+	ok.post(unsign('a1', R_PAU));
+	ok.post(unsign('a1', R_PAU));
+	assert.equal(ok.state.lockReleased, 2, 'també quan removed és false');
+
+	const broken = setupR4();
+	broken.state.failSpreadsheet = true;
+	const quiet = console.error;
+	console.error = () => {};
+	try {
+		assert.deepEqual(broken.post(unsign('a1', R_PAU)), { ok: false, v: 1, error: 'server' });
+	} finally {
+		console.error = quiet;
+	}
+	assert.equal(broken.state.lockReleased, 1);
+});
+
+test('unsignup: si el borrat falla (error del servidor) el lock s’allibera i la inscripció continua a Inscripcions', () => {
+	const script = setupR4();
+	script.sheets.get('Inscripcions').deleteRow = () => {
+		throw new Error('boom');
+	};
+	const quiet = console.error;
+	console.error = () => {};
+	try {
+		assert.deepEqual(script.post(unsign('a1', R_PAU)), { ok: false, v: 1, error: 'server' });
+	} finally {
+		console.error = quiet;
+	}
+	assert.equal(script.state.lockReleased, 1);
+	assert.equal(inscripcions(script).length, 5, 'la inscripció continua a Inscripcions');
+});
+
+test('unsignup: si el propietari reordena les files entre les dues lectures no esborra una altra fila', () => {
+	// Between the first and the second read of Inscripcions the owner sorts by name: the row that
+	// held Pau (row 3) now holds somebody else.
+	const script = setupR4({
+		beforeRead(sheetName, readNumber) {
+			if (sheetName !== 'Inscripcions' || readNumber !== 2) return;
+			const rows = script.sheets.get('Inscripcions').rows;
+			[rows[2], rows[4]] = [rows[4], rows[2]];
+		}
+	});
+	const answer = script.post(unsign('a1', R_PAU));
+	assert.equal(answer.removed, false);
+	assert.deepEqual(answer.names, ['Eva', 'Bea', 'Pau'], 'els noms són els de la segona lectura');
+	assert.equal(inscripcions(script).length, 5, 'no s’ha esborrat cap fila');
+	assert.deepEqual(inscripcions(script).map((r) => r[2]).sort(), ['Anna', 'Bea', 'Eva', 'Pau', 'nom'].sort());
+	assert.equal(script.sheets.has('Baixes'), false, 'res no s’arxiva');
+	assert.equal(script.sheets.get('Inscripcions').reads, 2, 'no es torna a buscar');
+	assert.equal(script.state.lockReleased, 1);
+	assert.deepEqual(script.logs, ['unsignup a1 removed=false']);
+});
+
+test('unsignup: si el propietari insereix una fila a sobre entre les lectures, la fila que pujava no s’esborra', () => {
+	const script = setupR4({
+		beforeRead(sheetName, readNumber) {
+			if (sheetName === 'Inscripcions' && readNumber === 2) {
+				script.sheets.get('Inscripcions').rows.splice(1, 0, [stamp(8), 'b2', 'Nova', 'req-nova-0009']);
+			}
+		}
+	});
+	const answer = script.post(unsign('a1', R_PAU));
+	assert.equal(answer.removed, false);
+	assert.deepEqual(answer.names, ['Eva', 'Pau', 'Bea']);
+	assert.equal(inscripcions(script).length, 6);
+	assert.ok(inscripcions(script).some((r) => r[2] === 'Pau'));
+	assert.equal(script.sheets.has('Baixes'), false);
+});
+
+test('unsignup: si la mateixa fila canvia de dades entre les lectures (mateix request_id d’un altre esdeveniment) no s’esborra', () => {
+	const script = setupR4({
+		beforeRead(sheetName, readNumber) {
+			if (sheetName === 'Inscripcions' && readNumber === 2) script.sheets.get('Inscripcions').rows[2][1] = 'b2';
+		}
+	});
+	assert.equal(script.post(unsign('a1', R_PAU)).removed, false);
+	assert.equal(inscripcions(script).length, 5);
+});
+
+test('unsignup: sense reordenació la relectura no canvia res (beforeRead es crida a cada lectura)', () => {
+	const calls = [];
+	const script = setupR4({ beforeRead: (sheetName, n) => calls.push([sheetName, n]) });
+	assert.equal(script.post(unsign('a1', R_PAU)).removed, true);
+	assert.deepEqual(calls.filter(([name]) => name === 'Inscripcions'), [['Inscripcions', 1], ['Inscripcions', 2]]);
+});
+
+test('unsignup: escriu un console.log amb removed també quan és false', () => {
+	const script = setupR4();
+	script.post(unsign('a1', R_PAU));
+	script.post(unsign('a1', R_PAU));
+	assert.deepEqual(script.logs, ['unsignup a1 removed=true', 'unsignup a1 removed=false']);
+	assert.ok(script.logs.every((line) => !line.includes(R_PAU)), 'el requestId no va al registre');
+});
+
+test('unsignup: dues persones amb el mateix nom a l’esdeveniment: només cau la fila del requestId', () => {
+	const script = setupR4({ signups: [...signupRows(), [stamp(9), 'a1', 'Eva', 'req-eva-0002']] });
+	const answer = script.post(unsign('a1', 'req-eva-0002'));
+	assert.deepEqual(answer.names, ['Eva', 'Pau', 'Bea']);
+	assert.ok(inscripcions(script).some((r) => r[3] === R_EVA));
+	assert.ok(!inscripcions(script).some((r) => r[3] === 'req-eva-0002'));
 });

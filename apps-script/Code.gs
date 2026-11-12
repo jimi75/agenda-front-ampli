@@ -4,7 +4,13 @@
  * - doGet  ?action=agenda  -> events + sign-ups as JSON. Each event also carries the optional
  *   columns `responsable` and `inscripcio_url` (J and K of Esdeveniments; empty when the sheet has
  *   no such header, so a sheet with only A:I keeps working)
+ *   It also carries `features: ['unsignup']`, so the web only offers a withdrawal when the script
+ *   supports it. It never carries `request_id`: that is the secret that allows the withdrawal.
  * - doPost {action:"signup"} (sent as text/plain, see src/lib/api.js) -> adds one sign-up
+ * - doPost {action:"unsignup", eventId, requestId} -> removes the sign-up row that has BOTH that
+ *   event_id and that request_id (never matched by name or by position), after copying the name to
+ *   the tab `Baixes`. It does not look at Config!B1 nor at whether the event still exists. It is
+ *   the only code that deletes rows.
  *
  * Create it from the sheet (Extensions > Apps Script) so it is bound to that sheet only.
  * @OnlyCurrentDoc
@@ -14,6 +20,8 @@ var API_VERSION = 1;
 var SHEET_EVENTS = 'Esdeveniments';
 var SHEET_SIGNUPS = 'Inscripcions';
 var SHEET_CONFIG = 'Config';
+// Archive of withdrawn sign-ups; created on the fly by the first unsignup, not by setup().
+var SHEET_ARCHIVE = 'Baixes';
 var EVENT_COLUMNS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'mapa', 'estat'];
 var REQUIRED_EVENT_COLUMNS = ['id', 'data', 'inici', 'tipus', 'nom'];
 // Written by hand in J1 and K1; setup() does not create them.
@@ -21,6 +29,7 @@ var OPTIONAL_EVENT_COLUMNS = ['responsable', 'inscripcio_url'];
 var LOCK_HEADERS = 'Capçalera: no canviar-ne el nom ni la posició (la web la fa servir)';
 var LOCK_LISTS = 'Llistes de dates i hores del desplegable (les crea setup)';
 var SIGNUP_COLUMNS = ['data_hora', 'event_id', 'nom', 'request_id'];
+var ARCHIVE_COLUMNS = ['data_hora_baixa', 'event_id', 'nom', 'request_id'];
 var COLUMN_KIND = { data: 'date', inici: 'time', fi: 'time' };
 // Days of November 2026 shown by the agenda (Monday 2 to Sunday 29). Same as src/lib/config.js.
 var FIRST_DAY = 2;
@@ -53,45 +62,103 @@ function doPost(e) {
   var locked = false;
   try {
     var body = parseBody_(e);
-    if (!body || body.action !== 'signup') return fail_('bad_request');
+    var action = body && body.action;
+    if (action !== 'signup' && action !== 'unsignup') return fail_('bad_request');
     var eventId = typeof body.eventId === 'string' ? body.eventId : '';
     var requestId = typeof body.requestId === 'string' ? body.requestId : '';
     if (!eventId || eventId.length > 20 || !REQUEST_ID_RE.test(requestId)) return fail_('bad_request');
-    var name = typeof body.name === 'string' ? cleanName_(body.name) : '';
-    if (!NAME_RE.test(name)) return fail_('invalid_name');
+    if (action === 'signup') {
+      var name = typeof body.name === 'string' ? cleanName_(body.name) : '';
+      if (!NAME_RE.test(name)) return fail_('invalid_name');
+    }
 
     locked = lock.tryLock(LOCK_WAIT_MS);
     if (!locked) return fail_('busy');
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var tz = ss.getSpreadsheetTimeZone();
-    if (!isOpen_(ss)) return fail_('closed');
-
-    var eventIds = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz).map(function (r) {
-      return r.id;
-    });
-    if (eventIds.indexOf(eventId) === -1) return fail_('unknown_event');
-
-    var cache = CacheService.getScriptCache();
-    var signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
-    // A request that already reached the sheet (the answer was lost) must not be written twice.
-    if (!cache.get('req:' + requestId)) {
-      var forEvent = signups.filter(function (r) {
-        return r.event_id === eventId;
-      });
-      if (forEvent.length >= MAX_SIGNUPS_PER_EVENT) return fail_('event_full');
-      if (signups.length >= MAX_SIGNUPS_TOTAL) return fail_('closed');
-      appendSignup_(ss, tz, eventId, name, requestId);
-      cache.put('req:' + requestId, '1', REQUEST_ID_TTL_SECONDS);
-      signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
-    }
-    return json_({ ok: true, v: API_VERSION, eventId: eventId, names: namesFor_(signups, eventId) });
+    return action === 'signup' ? signup_(body, ss, tz) : unsignup_(body, ss, tz);
   } catch (err) {
     console.error(err);
     return fail_('server');
   } finally {
     if (locked) lock.releaseLock();
   }
+}
+
+// Runs with the lock taken; eventId, requestId and name were already validated by doPost.
+function signup_(body, ss, tz) {
+  var eventId = body.eventId;
+  var requestId = body.requestId;
+  var name = cleanName_(body.name);
+  if (!isOpen_(ss)) return fail_('closed');
+
+  var eventIds = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz).map(function (r) {
+    return r.id;
+  });
+  if (eventIds.indexOf(eventId) === -1) return fail_('unknown_event');
+
+  var cache = CacheService.getScriptCache();
+  var signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
+  // A request that already reached the sheet (the answer was lost) must not be written twice.
+  if (!cache.get('req:' + requestId)) {
+    var forEvent = signups.filter(function (r) {
+      return r.event_id === eventId;
+    });
+    if (forEvent.length >= MAX_SIGNUPS_PER_EVENT) return fail_('event_full');
+    if (signups.length >= MAX_SIGNUPS_TOTAL) return fail_('closed');
+    appendSignup_(ss, tz, eventId, name, requestId);
+    cache.put('req:' + requestId, '1', REQUEST_ID_TTL_SECONDS);
+    signups = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
+  }
+  return json_({ ok: true, v: API_VERSION, eventId: eventId, names: namesFor_(signups, eventId) });
+}
+
+/**
+ * Removes the row of Inscripcions that has this event_id AND this request_id. It does not look at
+ * Config!B1 nor at whether the event exists (the web decides when to offer it). Idempotent: when
+ * there is no such row the answer is the same with removed:false.
+ * Runs with the lock taken; eventId and requestId were already validated by doPost.
+ */
+function unsignup_(body, ss, tz) {
+  var eventId = body.eventId;
+  var requestId = body.requestId;
+  var sheet = ss.getSheetByName(SHEET_SIGNUPS);
+
+  var rows = readTable_(sheet, SIGNUP_COLUMNS, tz);
+  var found = findSignup_(rows, eventId, requestId);
+  if (!found) return unsignupAnswer_(eventId, rows, false);
+
+  // The owner may sort or move rows by hand between the two reads: delete only if the same row
+  // number still holds the same two values, and never search again.
+  var fresh = readTable_(sheet, SIGNUP_COLUMNS, tz);
+  var same = fresh.filter(function (r) {
+    return r.row === found.row && r.event_id === eventId && r.request_id === requestId;
+  })[0];
+  if (!same) return unsignupAnswer_(eventId, fresh, false);
+
+  appendArchive_(ss, tz, eventId, same.nom, requestId);
+  sheet.deleteRow(same.row);
+  SpreadsheetApp.flush();
+  var remaining = fresh.filter(function (r) {
+    return r.row !== same.row;
+  });
+  return unsignupAnswer_(eventId, remaining, true);
+}
+
+/** The row with this event_id and this request_id; an empty request_id never matches. */
+function findSignup_(rows, eventId, requestId) {
+  if (requestId === '') return null;
+  return (
+    rows.filter(function (r) {
+      return r.event_id === eventId && r.request_id === requestId;
+    })[0] || null
+  );
+}
+
+function unsignupAnswer_(eventId, signupRows, removed) {
+  console.log('unsignup', eventId, 'removed=' + removed);
+  return json_({ ok: true, v: API_VERSION, eventId: eventId, names: namesFor_(signupRows, eventId), removed: removed });
 }
 
 function readAgenda_() {
@@ -112,7 +179,9 @@ function readAgenda_() {
     // Headers of Esdeveniments that were not found (renamed, deleted or moved out of row 1).
     missingColumns: missingColumns_(eventsSheet, REQUIRED_EVENT_COLUMNS),
     events: events,
-    signups: signups
+    signups: signups,
+    // What this script can do, so the web only offers what exists (empty on older scripts).
+    features: ['unsignup']
   };
 }
 
@@ -142,6 +211,16 @@ function appendSignup_(ss, tz, eventId, name, requestId) {
   var stamp = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss");
   var range = sheet.getRange(sheet.getLastRow() + 1, 1, 1, SIGNUP_COLUMNS.length);
   // Plain text format first: a second barrier so nothing written here is ever evaluated as a formula.
+  range.setNumberFormat('@');
+  range.setValues([[stamp, eventId, name, requestId]]);
+  SpreadsheetApp.flush();
+}
+
+function appendArchive_(ss, tz, eventId, name, requestId) {
+  var sheet = ensureSheet_(ss, SHEET_ARCHIVE, ARCHIVE_COLUMNS);
+  var stamp = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss");
+  var range = sheet.getRange(sheet.getLastRow() + 1, 1, 1, ARCHIVE_COLUMNS.length);
+  // Plain text format first, as in appendSignup_.
   range.setNumberFormat('@');
   range.setValues([[stamp, eventId, name, requestId]]);
   SpreadsheetApp.flush();
