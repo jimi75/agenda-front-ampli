@@ -1,4 +1,5 @@
 <script>
+	import { getContext } from 'svelte';
 	import { POSTER } from '#lib/config.js';
 	import { formatRange } from '#lib/events.js';
 	import { posterScale } from '#lib/poster-scale.js';
@@ -13,6 +14,9 @@
 	 */
 	let { event, dateLabel, node = $bindable() } = $props();
 
+	/** @type {import('#lib/districts.js').District} */
+	const district = getContext('district');
+
 	const k = $derived(posterScale(event.name, event.place));
 </script>
 
@@ -25,7 +29,7 @@
 	style:--k={k}
 	aria-hidden="true"
 >
-	<div class="band">{T.siteTitle}</div>
+	<div class="band">{T.siteTitle(district)}</div>
 	<div class="body">
 		<p class="type">{T.types[event.type].toLocaleUpperCase('ca')}</p>
 		<p class="name">{event.name.toLocaleUpperCase('ca')}</p>

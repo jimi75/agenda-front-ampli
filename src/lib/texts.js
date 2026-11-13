@@ -1,7 +1,9 @@
 import { MONTH } from './config.js';
 
 export const T = {
-	siteTitle: 'Agenda Frontamplista Sants-Montjuïc',
+	siteTitle: (/** @type {import('./districts.js').District} */ district) => `Agenda Frontamplista ${district.name}`,
+	siteDescription: (/** @type {import('./districts.js').District} */ district) =>
+		`Accions i actes de ${MONTH.name} de ${MONTH.year} al districte ${district.deName}.`,
 	monthLabel: `${MONTH.name} ${MONTH.year}`,
 	weekdays: ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte', 'diumenge'],
 	weekdaysShort: ['dl.', 'dt.', 'dc.', 'dj.', 'dv.', 'ds.', 'dg.'],
@@ -14,8 +16,10 @@ export const T = {
 	loading: 'Carregant l’agenda…',
 	empty: 'Encara no hi ha cap activitat programada.',
 	unreadable: 'L’agenda té un problema i ara no es pot mostrar. Torna-ho a provar d’aquí a una estona.',
-	missingColumns: (/** @type {string[]} */ names) =>
-		`A la pestanya Esdeveniments no es troba la capçalera: ${names.join(', ')}. Ha de ser a la fila 1 i escrita exactament així.`,
+	missingColumns: (/** @type {string[]} */ names, tab = 'Esdeveniments') =>
+		`A la pestanya ${tab} no es troba la capçalera: ${names.join(', ')}. Ha de ser a la fila 1 i escrita exactament així.`,
+	prefixWarning: (/** @type {string[]} */ ids, /** @type {import('./districts.js').District} */ district) =>
+		`Aquests ids no comencen per ${district.prefix}: ${ids.join(', ')}. Es mostren igualment.`,
 	allRowsSkipped: 'Cap fila del full és vàlida, per això no es mostra cap activitat.',
 	loadError: 'No s’ha pogut carregar l’agenda.',
 	loadErrorHelp: 'Comprova la connexió o torna-ho a provar d’aquí a uns minuts.',
@@ -108,6 +112,7 @@ export const T = {
 		unconfirmed:
 			'No hem pogut confirmar l’enviament. Recarrega la pàgina i mira la llista abans de tornar-ho a provar.',
 		server: 'Hi ha hagut un error al servidor. Torna-ho a provar d’aquí a un moment.',
-		bad_request: 'No s’ha pogut fer. Recarrega la pàgina i torna-ho a provar.'
+		bad_request: 'No s’ha pogut fer. Recarrega la pàgina i torna-ho a provar.',
+		unknown_district: 'No s’ha pogut fer. Recarrega la pàgina i torna-ho a provar.'
 	})
 };

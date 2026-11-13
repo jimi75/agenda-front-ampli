@@ -1,17 +1,25 @@
 <script>
-	import { onMount, tick } from 'svelte';
+	import { onMount, setContext, tick } from 'svelte';
 	import { browserStorage, createApi } from '#lib/api.js';
 	import Calendar from '#lib/components/Calendar.svelte';
 	import EventDetail from '#lib/components/EventDetail.svelte';
 	import Header from '#lib/components/Header.svelte';
 	import Legend from '#lib/components/Legend.svelte';
 	import SignupDialog from '#lib/components/SignupDialog.svelte';
+	import { eventsTabName, missingPrefix, mineKey } from '#lib/districts.js';
 	import { groupByDate, normalizeEvents, parseEventParam } from '#lib/events.js';
 	import { buildMonth, todayIso } from '#lib/month.js';
 	import { readMine } from '#lib/my-signups.js';
 	import { detailUrl } from '#lib/share.js';
 	import { participationState } from '#lib/state.js';
 	import { T } from '#lib/texts.js';
+
+	/** @type {{ data: { district: import('#lib/districts.js').District } }} */
+	let { data: page } = $props();
+	// A page is prerendered for one district and never navigates to another.
+	// svelte-ignore state_referenced_locally
+	const district = page.district;
+	setContext('district', district);
 
 	const month = buildMonth();
 	const API_URL = import.meta.env.VITE_AGENDA_API_URL ?? '';
@@ -47,6 +55,7 @@
 	// The detail opened from a `?e=` link has no opener to give the focus back to.
 	let openedFromLink = false;
 
+	const missingIds = $derived(missingPrefix(data?.events ?? [], district));
 	const byDate = $derived(groupByDate(data?.events ?? []));
 	const detailEvent = $derived(data?.events.find((e) => e.id === detailId) ?? null);
 	const signupEvent = $derived(data?.events.find((e) => e.id === signupId) ?? null);
@@ -137,7 +146,7 @@
 		const id = signupId;
 		if (!api || !id || !data) return { ok: false, error: 'server' };
 		const result = await api.signup(id, name, data.signups.get(id)?.length ?? 0);
-		mine = readMine(browserStorage());
+		mine = readMine(browserStorage(), mineKey(district));
 		if (result.ok) {
 			data = { ...data, signups: new Map(data.signups).set(id, result.names) };
 		} else if (result.error === 'closed') {
@@ -150,7 +159,7 @@
 	async function unsignup(eventId, requestId) {
 		if (!api) return { ok: false, error: 'server' };
 		const result = await api.unsignup(eventId, requestId);
-		mine = readMine(browserStorage());
+		mine = readMine(browserStorage(), mineKey(district));
 		if (result.ok && data) {
 			data = { ...data, signups: new Map(data.signups).set(eventId, result.names) };
 		}
@@ -165,11 +174,11 @@
 	onMount(async () => {
 		today = todayIso();
 		showAdmin = new URLSearchParams(location.search).has('admin');
-		mine = readMine(browserStorage());
+		mine = readMine(browserStorage(), mineKey(district));
 		if (API_URL) {
-			api = createApi({ url: API_URL });
+			api = createApi({ url: API_URL, district });
 		} else if (import.meta.env.DEV) {
-			api = (await import('#lib/mock-api.js')).createMockApi();
+			api = (await import('#lib/mock-api.js')).createMockApi({ district });
 		}
 		if (!api) {
 			status = 'error';
@@ -187,6 +196,13 @@
 		}
 	});
 </script>
+
+<svelte:head>
+	<title>{T.siteTitle(district)}</title>
+	<meta name="description" content={T.siteDescription(district)} />
+	<meta property="og:title" content={T.siteTitle(district)} />
+	<meta property="og:description" content={T.siteDescription(district)} />
+</svelte:head>
 
 <svelte:document onvisibilitychange={refreshWhenVisible} />
 
@@ -219,7 +235,7 @@
 		<div class="notice">
 			<p>features: {data.features.length ? data.features.join(', ') : '—'} · local signups: {mine.length}</p>
 			{#if data.missingColumns.length}
-				<p><strong>{T.missingColumns(data.missingColumns)}</strong></p>
+				<p><strong>{T.missingColumns(data.missingColumns, eventsTabName(district))}</strong></p>
 			{/if}
 			{#if unreadable}<p>{T.allRowsSkipped}</p>{/if}
 			{#if data.skipped.length}
@@ -229,6 +245,9 @@
 						<li>Fila {row.row}: {row.reason}</li>
 					{/each}
 				</ul>
+			{/if}
+			{#if missingIds.length}
+				<p><strong>{T.prefixWarning(missingIds, district)}</strong></p>
 			{/if}
 		</div>
 	{/if}

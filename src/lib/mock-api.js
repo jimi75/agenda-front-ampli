@@ -1,5 +1,6 @@
 import { browserStorage } from './api.js';
 import { validateName } from './names.js';
+import { mineKey, ROOT_DISTRICT } from './districts.js';
 import { addMine, removeMine } from './my-signups.js';
 
 /** Development-only stand-in for the Apps Script, with the same contract as apps-script/Code.gs. */
@@ -20,7 +21,7 @@ const EVENTS = [
 const KEYS = ['id', 'data', 'inici', 'fi', 'tipus', 'nom', 'lloc', 'estat', 'responsable', 'inscripcio_url'];
 
 /** @returns {import('./api.js').AgendaApi} */
-export function createMockApi({ delay = 250, storage = browserStorage() } = {}) {
+export function createMockApi({ delay = 250, storage = browserStorage(), district = ROOT_DISTRICT } = {}) {
 	const wait = () => new Promise((resolve) => setTimeout(resolve, delay));
 	const events = EVENTS.map((row) => Object.fromEntries(KEYS.map((key, i) => [key, row[i] ?? ''])));
 	/** @type {Map<string, string[]>} */
@@ -55,7 +56,7 @@ export function createMockApi({ delay = 250, storage = browserStorage() } = {}) 
 			const requestId = globalThis.crypto.randomUUID();
 			mine.push({ eventId, requestId, name: valid.name });
 			// The real api.js writes the local record; the mock does it too so "La teva participació" shows in dev.
-			addMine(storage, { eventId, requestId, name: valid.name });
+			addMine(storage, { eventId, requestId, name: valid.name }, mineKey(district));
 			return { ok: true, names, requestId };
 		},
 		async unsignup(eventId, requestId) {
@@ -67,7 +68,7 @@ export function createMockApi({ delay = 250, storage = browserStorage() } = {}) 
 				names.splice(names.lastIndexOf(name), 1);
 				signups.set(eventId, names);
 			}
-			removeMine(storage, eventId, requestId);
+			removeMine(storage, eventId, requestId, mineKey(district));
 			return { ok: true, names: [...(signups.get(eventId) ?? [])], removed: index !== -1 };
 		}
 	};

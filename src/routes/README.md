@@ -1,19 +1,20 @@
 # src/routes
 
 ## Overview
-SvelteKit routes. A single static page that loads the agenda, orchestrates the calendar, the event detail dialog and the sign-up dialog, and a layout that loads fonts and the favicon.
+SvelteKit routes. A static page, `[[districte]]`, served at `/` (root district) and at `/<slug>` for each routed district, that loads the agenda, orchestrates the calendar, the event detail dialog and the sign-up dialog, and a layout that loads fonts and the favicon.
 
 ## Interface
 - [+layout.js](./+layout.js): `export const prerender = true`.
 - [+layout.svelte](./+layout.svelte): imports `@fontsource/special-gothic-condensed-one/400.css`, `@fontsource-variable/special-gothic/wght.css` and `#lib/assets/favicon.svg`; renders the `children` snippet and the favicon link.
-- [+page.svelte](./+page.svelte): the agenda page. Composes `Header`, `Legend`, `Calendar`, `EventDetail` and `SignupDialog` from [components](../lib/components/README.md); uses `createApi` (or `createMockApi` in dev), `normalizeEvents`, `groupByDate`, `parseEventParam`, `buildMonth`, `todayIso`, `readMine`, `detailUrl` and `participationState` from [lib](../lib/README.md). Local state: `status` (`loading | ready | error`), `data`, `detailId`, `signupId`, `mine`, `today`, `showAdmin`.
+- [[[districte]]/+page.js](<./[[districte]]/+page.js>): `entries()` (one entry per `ROUTED_DISTRICTS`) and `load({ params })` → `{ district }` (`ROOT_DISTRICT` without parameter; `error(404)` for an unknown slug).
+- [[[districte]]/+page.svelte](<./[[districte]]/+page.svelte>): the agenda page; publishes `setContext('district', district)` and emits the `<title>`, `description`, `og:title` and `og:description` in `<svelte:head>` (so each prerendered HTML has its own). Composes `Header`, `Legend`, `Calendar`, `EventDetail` and `SignupDialog` from [components](../lib/components/README.md); uses `createApi` (or `createMockApi` in dev), `normalizeEvents`, `groupByDate`, `parseEventParam`, `buildMonth`, `todayIso`, `readMine(…, mineKey(district))`, `detailUrl` and `participationState` from [lib](../lib/README.md). Local state: `status` (`loading | ready | error`), `data`, `detailId`, `signupId`, `mine`, `today`, `showAdmin`.
 
 ## Invariants
-- [+page.svelte](./+page.svelte) picks the API in `onMount`: `VITE_AGENDA_API_URL` set → `createApi`; else `import.meta.env.DEV` → `createMockApi` (dynamic import); else `status = 'error'`.
+- [[[districte]]/+page.svelte](<./[[districte]]/+page.svelte>) picks the API in `onMount`: `VITE_AGENDA_API_URL` set → `createApi`; else `import.meta.env.DEV` → `createMockApi` (dynamic import); else `status = 'error'`.
 - A silent refresh (`load({ silent: true })`) never replaces fresh data with a stale offline copy (`staleSince !== null`) and never shows errors; refresh on `visibilitychange` happens only after `REFRESH_AFTER_MS` (120000) and while `status === 'ready'`.
 - The `?e=<id>` link is read once after the first successful load via `parseEventParam`; with no link, the list on narrow screens (below `min-width: 1024px`) scrolls to the next day with events.
 - `unreadable` (no valid events and `missingColumns` or skipped rows present) shows an error with retry instead of an empty calendar.
-- The `?admin` query parameter only reveals the diagnostics block (features, local sign-ups, missing columns, skipped rows).
+- The `?admin` query parameter only reveals the diagnostics block (features, local sign-ups, missing columns of `eventsTabName(district)`, skipped rows and, on a district page, ids without the district prefix).
 - `Calendar` receives `mine`, `data.features` and the same `unsignup` handler as `SignupDialog`, so a card can remove the browser's own signup directly.
 - After each `signup` / `unsignup`, `mine` is re-read from `localStorage`; a `closed` signup error sets `signupsOpen` to `false` locally.
 - `openSignup` triggers a silent reload so the shown list is fresh.

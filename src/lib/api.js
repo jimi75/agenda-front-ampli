@@ -1,4 +1,5 @@
-import { REQUEST_TIMEOUT_MS, STORAGE_KEY } from './config.js';
+import { REQUEST_TIMEOUT_MS } from './config.js';
+import { mineKey, ROOT_DISTRICT, storageKey } from './districts.js';
 import { addMine, removeMine } from './my-signups.js';
 
 /**
@@ -18,9 +19,16 @@ import { addMine, removeMine } from './my-signups.js';
 
 const isString = (/** @type {unknown} */ v) => typeof v === 'string';
 
-/** @param {any} json @returns {Agenda} */
-export function parseAgenda(json) {
+/**
+ * A district page needs `json.district` to be its slug; the root needs it absent. Otherwise the
+ * answer (or the saved copy) belongs to another district, or comes from an older script.
+ * @param {any} json @param {import('./districts.js').District} [district] @returns {Agenda}
+ */
+export function parseAgenda(json, district = ROOT_DISTRICT) {
 	if (!json || json.ok !== true || json.v !== 1 || !Array.isArray(json.events)) {
+		throw new Error('bad_response');
+	}
+	if (district === ROOT_DISTRICT ? json.district !== undefined : json.district !== district.slug) {
 		throw new Error('bad_response');
 	}
 	const signups = new Map();
@@ -48,6 +56,7 @@ export function browserStorage() {
  * text/plain with the JSON as a string and no custom headers.
  * @param {{
  *   url: string,
+ *   district?: import('./districts.js').District,
  *   fetchFn?: typeof fetch,
  *   storage?: Pick<Storage, 'getItem' | 'setItem'> | null,
  *   now?: () => number,
@@ -58,6 +67,7 @@ export function browserStorage() {
  */
 export function createApi({
 	url,
+	district = ROOT_DISTRICT,
 	fetchFn = (...args) => globalThis.fetch(...args),
 	storage = browserStorage(),
 	now = () => Date.now(),
@@ -77,11 +87,14 @@ export function createApi({
 		}
 	}
 
+	const isRoot = district === ROOT_DISTRICT;
+	const agendaUrl = isRoot ? `${url}?action=agenda` : `${url}?action=agenda&d=${encodeURIComponent(district.slug)}`;
+
 	async function fetchAgenda() {
-		const json = await request(`${url}?action=agenda`, { cache: 'no-store' });
-		const agenda = parseAgenda(json);
+		const json = await request(agendaUrl, { cache: 'no-store' });
+		const agenda = parseAgenda(json, district);
 		try {
-			storage?.setItem(STORAGE_KEY, JSON.stringify({ at: now(), json }));
+			storage?.setItem(storageKey(district), JSON.stringify({ at: now(), json }));
 		} catch {
 			// A full or blocked storage only loses the offline copy.
 		}
@@ -90,9 +103,9 @@ export function createApi({
 
 	function readCopy() {
 		try {
-			const stored = JSON.parse(storage?.getItem(STORAGE_KEY) ?? 'null');
+			const stored = JSON.parse(storage?.getItem(storageKey(district)) ?? 'null');
 			if (stored && typeof stored.at === 'number') {
-				return { agenda: parseAgenda(stored.json), at: /** @type {number} */ (stored.at) };
+				return { agenda: parseAgenda(stored.json, district), at: /** @type {number} */ (stored.at) };
 			}
 		} catch {
 			// Corrupt copy: behave as if there was none.
@@ -114,7 +127,7 @@ export function createApi({
 		async signup(eventId, name, knownCount) {
 			const requestId = uuid();
 			const result = await send(eventId, name, knownCount, requestId);
-			if (result.ok) addMine(storage, { eventId, requestId, name });
+			if (result.ok) addMine(storage, { eventId, requestId, name }, mineKey(district));
 			return result;
 		},
 
@@ -134,7 +147,7 @@ export function createApi({
 				return { ok: false, error: 'network' };
 			}
 			if (json?.ok === true && Array.isArray(json.names) && typeof json.removed === 'boolean') {
-				removeMine(storage, eventId, requestId);
+				removeMine(storage, eventId, requestId, mineKey(district));
 				return { ok: true, names: json.names.filter(isString), removed: json.removed };
 			}
 			if (json?.ok === false && isString(json.error)) return { ok: false, error: json.error };
@@ -149,7 +162,7 @@ export function createApi({
 			json = await request(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-				body: JSON.stringify({ action: 'signup', eventId, name, requestId })
+				body: JSON.stringify(isRoot ? { action: 'signup', eventId, name, requestId } : { action: 'signup', eventId, name, requestId, d: district.slug })
 			});
 		} catch {
 			return recover(eventId, name, knownCount, requestId);

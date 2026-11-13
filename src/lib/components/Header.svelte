@@ -1,11 +1,15 @@
 <script>
+	import { getContext } from 'svelte';
 	import { T } from '#lib/texts.js';
+
+	/** @type {import('#lib/districts.js').District} */
+	const district = getContext('district');
 </script>
 
 <header class="hero">
 	<h1>
 		<span class="line">Agenda Frontamplista</span>
-		<span class="line">Sants-Montjuïc</span>
+		<span class="line">{district.name}</span>
 	</h1>
 	<p class="month">{T.monthLabel}</p>
 </header>

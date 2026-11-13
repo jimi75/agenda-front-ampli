@@ -90,3 +90,19 @@ test('diversos registres per a un mateix esdeveniment i baixa per requestId', ()
 	removeMine(storage, 'a1', 'inexistent');
 	assert.equal(readMine(storage).length, 2);
 });
+
+test('amb una clau pròpia només es llegeix i s’escriu aquesta clau', () => {
+	const old = { v: 1, items: [{ eventId: 'a1', requestId: 'r-0', name: 'Eva' }] };
+	const storage = memoryStorage({ [MY_SIGNUPS_KEY]: JSON.stringify(old) });
+	addMine(storage, { eventId: 'e1', requestId: 'r-1', name: 'Pau' }, 'k');
+	assert.deepEqual(readMine(storage, 'k'), [{ eventId: 'e1', requestId: 'r-1', name: 'Pau' }]);
+	assert.deepEqual(JSON.parse(/** @type {string} */ (storage.data.get(MY_SIGNUPS_KEY))), old);
+
+	addMine(storage, { eventId: 'e1', requestId: 'r-2', name: 'Bea' }, 'k');
+	assert.equal(mineForEvent(storage, 'e1', 'k').length, 2);
+	assert.equal(mineForEvent(storage, 'e1').length, 0);
+	removeMine(storage, 'e1', 'r-1', 'k');
+	assert.deepEqual(readMine(storage, 'k').map((i) => i.requestId), ['r-2']);
+	assert.deepEqual(JSON.parse(/** @type {string} */ (storage.data.get(MY_SIGNUPS_KEY))), old);
+	assert.deepEqual(readMine(storage), old.items);
+});

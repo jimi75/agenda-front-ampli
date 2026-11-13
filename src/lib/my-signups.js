@@ -16,11 +16,12 @@ function isItem(item) {
  * This browser's own signups, the only place where the secret of an unsignup lives.
  * Corrupt JSON, a missing storage or malformed items read as "nothing".
  * @param {MyStorage} storage
+ * @param {string} [key] one key per district
  * @returns {MySignup[]}
  */
-export function readMine(storage) {
+export function readMine(storage, key = MY_SIGNUPS_KEY) {
 	try {
-		const stored = JSON.parse(storage?.getItem(MY_SIGNUPS_KEY) ?? 'null');
+		const stored = JSON.parse(storage?.getItem(key) ?? 'null');
 		if (!stored || stored.v !== 1 || !Array.isArray(stored.items)) return [];
 		return /** @type {unknown[]} */ (stored.items)
 			.filter(isItem)
@@ -30,29 +31,30 @@ export function readMine(storage) {
 	}
 }
 
-/** @param {MyStorage} storage @param {MySignup[]} items */
-function write(storage, items) {
+/** @param {MyStorage} storage @param {MySignup[]} items @param {string} key */
+function write(storage, items, key) {
 	try {
-		storage?.setItem(MY_SIGNUPS_KEY, JSON.stringify({ v: 1, items }));
+		storage?.setItem(key, JSON.stringify({ v: 1, items }));
 	} catch {
 		// A full or blocked storage only loses the local record.
 	}
 }
 
-/** @param {MyStorage} storage @param {MySignup} item */
-export function addMine(storage, item) {
-	write(storage, [...readMine(storage), item]);
+/** @param {MyStorage} storage @param {MySignup} item @param {string} [key] */
+export function addMine(storage, item, key = MY_SIGNUPS_KEY) {
+	write(storage, [...readMine(storage, key), item], key);
 }
 
-/** @param {MyStorage} storage @param {string} eventId @param {string} requestId */
-export function removeMine(storage, eventId, requestId) {
+/** @param {MyStorage} storage @param {string} eventId @param {string} requestId @param {string} [key] */
+export function removeMine(storage, eventId, requestId, key = MY_SIGNUPS_KEY) {
 	write(
 		storage,
-		readMine(storage).filter((item) => !(item.eventId === eventId && item.requestId === requestId))
+		readMine(storage, key).filter((item) => !(item.eventId === eventId && item.requestId === requestId)),
+		key
 	);
 }
 
-/** @param {MyStorage} storage @param {string} eventId */
-export function mineForEvent(storage, eventId) {
-	return readMine(storage).filter((item) => item.eventId === eventId);
+/** @param {MyStorage} storage @param {string} eventId @param {string} [key] */
+export function mineForEvent(storage, eventId, key = MY_SIGNUPS_KEY) {
+	return readMine(storage, key).filter((item) => item.eventId === eventId);
 }

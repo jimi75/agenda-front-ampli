@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApi, parseAgenda } from './api.js';
+import { ROUTED_DISTRICTS } from './districts.js';
 import { readMine } from './my-signups.js';
 
 const agendaJson = (/** @type {Record<string, string[]>} */ signups = {}) => ({
@@ -406,4 +407,62 @@ test('unsignup: sense storage també respon (no hi ha registre per treure)', asy
 		fetchFn: /** @type {any} */ (async () => reply({ ok: true, v: 1, eventId: 'a1', names: [], removed: false }))
 	});
 	assert.deepEqual(await api.unsignup('a1', 'req-pau-0001'), { ok: true, names: [], removed: false });
+});
+
+// ---- districts ----
+
+const EIXAMPLE = ROUTED_DISTRICTS[0];
+const eixampleJson = () => ({ ...agendaJson(), district: 'eixample' });
+
+test('Eixample afegeix &d=eixample al GET i desa la còpia amb la seva clau', async () => {
+	const storage = memoryStorage();
+	/** @type {string[]} */
+	const urls = [];
+	const api = createApi({
+		url: 'https://example.test/exec',
+		district: EIXAMPLE,
+		storage,
+		fetchFn: /** @type {any} */ ((/** @type {string} */ url) => (urls.push(url), Promise.resolve(reply(eixampleJson()))))
+	});
+	await api.loadAgenda();
+	assert.deepEqual(urls, ['https://example.test/exec?action=agenda&d=eixample']);
+	assert.ok(storage.getItem('agenda-eixample-2026-11'));
+	assert.equal(storage.getItem('agenda-sants-montjuic-2026-11'), null);
+});
+
+test('el POST de signup d’Eixample porta d i el de Sants no', async () => {
+	/** @type {any[]} */
+	const bodies = [];
+	const fetchFn = /** @type {any} */ (
+		async (/** @type {string} */ _url, /** @type {RequestInit} */ init) => (
+			bodies.push(JSON.parse(/** @type {string} */ (init.body))), reply({ ok: true, names: ['Eva'] })
+		)
+	);
+	const storage = memoryStorage();
+	await createApi({ url: 'u', district: EIXAMPLE, storage, fetchFn, uuid: () => 'req-1' }).signup('eix-a', 'Eva', 0);
+	await createApi({ url: 'u', storage, fetchFn, uuid: () => 'req-2' }).signup('a1', 'Eva', 0);
+	assert.equal(bodies[0].d, 'eixample');
+	assert.ok(!('d' in bodies[1]));
+	assert.equal(readMine(storage, 'agenda-eixample-2026-11:mine').length, 1);
+	assert.equal(readMine(storage).length, 1);
+});
+
+test('parseAgenda: la raíz rebutja district i Eixample exigeix el seu', () => {
+	assert.throws(() => parseAgenda(eixampleJson()), /bad_response/);
+	assert.doesNotThrow(() => parseAgenda(agendaJson()));
+	assert.throws(() => parseAgenda(agendaJson(), EIXAMPLE), /bad_response/);
+	assert.throws(() => parseAgenda({ ...agendaJson(), district: 'altre' }, EIXAMPLE), /bad_response/);
+	assert.doesNotThrow(() => parseAgenda(eixampleJson(), EIXAMPLE));
+});
+
+test('Eixample amb un script antic (sense district) falla i no mostra la còpia de Sants', async () => {
+	const storage = memoryStorage();
+	storage.setItem('agenda-sants-montjuic-2026-11', JSON.stringify({ at: 1, json: agendaJson() }));
+	const api = createApi({
+		url: 'u',
+		district: EIXAMPLE,
+		storage,
+		fetchFn: /** @type {any} */ (async () => reply(agendaJson()))
+	});
+	await assert.rejects(api.loadAgenda(), /bad_response/);
 });
