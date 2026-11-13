@@ -2,7 +2,7 @@
 	import { tick, untrack } from 'svelte';
 	import { formatRange } from '#lib/events.js';
 	import { renderPoster } from '#lib/poster.js';
-	import { copyText, downloadFile, shareImage, shareText, waLink } from '#lib/share.js';
+	import { downloadFile, shareImage, shareText, waLink } from '#lib/share.js';
 	import { T } from '#lib/texts.js';
 	import PosterView from './PosterView.svelte';
 
@@ -25,10 +25,6 @@
 	let dialog = $state();
 	/** @type {HTMLButtonElement | undefined} */
 	let closeButton = $state();
-	/** @type {HTMLInputElement | undefined} */
-	let linkField = $state();
-	/** @type {'idle' | 'copied' | 'failed'} */
-	let copyState = $state('idle');
 	let generating = $state(false);
 	/** @type {'download' | 'share' | null} */
 	let generatingFor = $state(null);
@@ -52,6 +48,7 @@
 	const canShare = $derived(participation === 'open' || participation === 'closed' || participation === 'external');
 	const busy = $derived(generating || sharing);
 	const showWaLink = $derived(shareView === 'fallback' || shareView === 'failed');
+	const text = $derived(event ? shareText(event, dateLabel, url) : '');
 
 	function resetShare() {
 		epoch++;
@@ -68,7 +65,6 @@
 	$effect(() => {
 		if (!dialog) return;
 		if (visible && !dialog.open) {
-			copyState = 'idle';
 			untrack(resetShare);
 			dialog.showModal();
 			tick().then(() => closeButton?.focus());
@@ -86,15 +82,6 @@
 	function handleClose() {
 		resetShare();
 		onclose();
-	}
-
-	async function copy() {
-		copyState = (await copyText(url)) ? 'copied' : 'failed';
-		if (copyState === 'failed') {
-			await tick();
-			linkField?.focus();
-			linkField?.select();
-		}
 	}
 
 	/**
@@ -152,7 +139,7 @@
 		}
 		const token = epoch;
 		sharing = true;
-		const outcome = await shareImage(file, shareText(url));
+		const outcome = await shareImage(file, text);
 		if (token !== epoch) return;
 		sharing = false;
 		if (outcome === 'needs-second-tap') {
@@ -168,7 +155,7 @@
 		const file = readyFile;
 		if (!file) return;
 		const token = epoch;
-		const pending = shareImage(file, shareText(url), { second: true });
+		const pending = shareImage(file, text, { second: true });
 		readyFile = null;
 		shareView = 'idle';
 		sharing = true;
@@ -274,9 +261,8 @@
 									? T.share.ready
 									: T.share.share}
 						</button>
-						<button type="button" class="action" onclick={copy}>{T.share.copyLink}</button>
 						{#if showWaLink}
-							<a class="action" href={waLink(shareText(url))} target="_blank" rel="noopener noreferrer"
+							<a class="action" href={waLink(text)} target="_blank" rel="noopener noreferrer"
 								>{T.share.waLink}<span class="sr-only"> {T.newTab}</span></a
 							>
 						{/if}
@@ -286,23 +272,8 @@
 								? T.share.imageFailed
 								: shareView === 'fallback'
 									? T.share.fallbackNote
-									: copyState === 'copied'
-										? T.share.copied
-										: copyState === 'failed'
-											? T.share.copyFailed
-											: ''}
+									: ''}
 						</p>
-						{#if copyState === 'failed'}
-							<input
-								bind:this={linkField}
-								class="link-field"
-								type="text"
-								readonly
-								value={url}
-								aria-label={T.share.copyLink}
-								onfocus={(focusEvent) => /** @type {HTMLInputElement} */ (focusEvent.currentTarget).select()}
-							/>
-						{/if}
 					</section>
 				{/if}
 			{:else}
@@ -558,14 +529,4 @@
 		font-weight: 600;
 	}
 
-	.link-field {
-		flex-basis: 100%;
-		min-height: 44px;
-		padding: 0 0.75rem;
-		border: 2px solid var(--rust);
-		border-radius: 4px;
-		background: #fff;
-		color: var(--ink);
-		font: 500 1rem/1.2 var(--font-text);
-	}
 </style>

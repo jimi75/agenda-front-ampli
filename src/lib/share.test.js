@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detailUrl, copyText, downloadFile, shareImage, shareText, waLink } from './share.js';
-import { T } from './texts.js';
+import { detailUrl, downloadFile, shareImage, shareText, waLink } from './share.js';
 
 test('detailUrl: origen + ruta + ?e=, sense arrossegar ?admin ni altres paràmetres', () => {
 	const location = { origin: 'https://jimi75.github.io', pathname: '/agenda-front-ampli/', search: '?admin&e=altre', hash: '#x' };
@@ -20,39 +19,85 @@ test('detailUrl: codifica l’id', () => {
 	assert.equal(detailUrl({ origin: 'https://example.test', pathname: '/' }, 'a b&c'), 'https://example.test/?e=a%20b%26c');
 });
 
-test('shareText: el text del marcador de posició amb l’enllaç', () => {
-	assert.equal(shareText('https://example.test/?e=a1'), T.share.text('https://example.test/?e=a1'));
-	assert.ok(shareText('https://example.test/?e=a1').endsWith('https://example.test/?e=a1'));
+const EVENT = {
+	name: 'Paradeta al mercat',
+	start: '18:30',
+	end: '20:00',
+	place: 'Mercat de Sants',
+	externalUrl: ''
+};
+const DATE_LABEL = 'dijous 12 de novembre';
+const DETAIL_URL = 'https://example.test/?e=a1';
+const FULL_TEXT =
+	'📢 *Paradeta al mercat* 📢\n\n🗓️ Dijous 12 de novembre\n⏰ 18.30h-20h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: https://example.test/?e=a1';
+
+/** @param {string} text */
+function assertWellFormedShareText(text) {
+	assert.ok(!text.includes('\n\n\n'), 'no hi ha més d’una línia en blanc entre blocs');
+	assert.ok(!text.includes('\r'), 'no hi ha retorns de carro');
+	assert.equal(text.trim(), text, 'no hi ha espais ni salts de línia als extrems');
+}
+
+test('shareText: plantilla completa amb data, hora, lloc i enllaç del detall', () => {
+	const text = shareText(EVENT, DATE_LABEL, DETAIL_URL);
+	assert.equal(text, FULL_TEXT);
+	assertWellFormedShareText(text);
 });
 
-test('waLink: codifica accents i l’apòstrof tipogràfic', () => {
-	const text = 'Apunta’t a l’activitat aquí: https://example.test/?e=a1&x=2';
+test('shareText: l’enllaç extern substitueix el del detall', () => {
+	const text = shareText({ ...EVENT, externalUrl: 'https://example.org/inscripcio' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(text.endsWith('🔗 Més detalls i inscripcions: https://example.org/inscripcio'));
+	assert.ok(!text.includes(DETAIL_URL));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: omet el lloc buit sense afegir línies en blanc', () => {
+	const text = shareText({ ...EVENT, place: '' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(!text.includes('📍'));
+	assert.equal(text, FULL_TEXT.replace('\n📍 Mercat de Sants', ''));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: mostra només l’hora d’inici si no hi ha hora de final', () => {
+	const text = shareText({ ...EVENT, start: '23:45', end: '' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(text.includes('\n⏰ 23.45h\n'));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: omet una data buida', () => {
+	const text = shareText(EVENT, '', DETAIL_URL);
+	assert.ok(!text.includes('🗓️'));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: substitueix salts de línia dins del títol i el lloc per un espai', () => {
+	const text = shareText({ ...EVENT, name: 'A\r\nB', place: 'Mercat\r\nCentral' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(text.includes('📢 *A B* 📢'));
+	assert.ok(text.includes('📍 Mercat Central'));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: no escapa els asteriscs del títol', () => {
+	const text = shareText({ ...EVENT, name: 'A*B' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(text.includes('📢 *A*B* 📢'));
+	assertWellFormedShareText(text);
+});
+
+test('shareText: omet el títol buit i manté el bloc de data i el d’enllaç', () => {
+	const text = shareText({ ...EVENT, name: '' }, DATE_LABEL, DETAIL_URL);
+	assert.ok(!text.includes('📢'));
+	assert.ok(text.startsWith('🗓️ Dijous 12 de novembre'));
+	assertWellFormedShareText(text);
+});
+
+test('waLink: codifica accents sense perdre el text', () => {
+	const text = FULL_TEXT;
 	const link = waLink(text);
 	assert.ok(link.startsWith('https://wa.me/?text='));
-	assert.equal(decodeURIComponent(link.slice('https://wa.me/?text='.length)), text);
+	assert.equal(new URL(link).searchParams.get('text'), text);
 	assert.ok(!/[^\x21-\x7e]/.test(link), 'només ASCII imprimible');
-	assert.ok(link.includes('%E2%80%99'), 'apòstrof tipogràfic');
-	assert.ok(link.includes('aqu%C3%AD'), 'accent');
+	assert.ok(link.includes('M%C3%A9s'), 'accent');
 	assert.ok(!link.slice('https://wa.me/?text='.length).includes('&'), 'el & de l’enllaç no trenca el paràmetre');
-});
-
-test('copyText: èxit, error i sense portaretalls', async () => {
-	/** @type {string[]} */
-	const copied = [];
-	const ok = { clipboard: { writeText: async (/** @type {string} */ t) => void copied.push(t) } };
-	assert.equal(await copyText('https://example.test/?e=a1', ok), true);
-	assert.deepEqual(copied, ['https://example.test/?e=a1']);
-
-	const failing = {
-		clipboard: {
-			writeText: async () => {
-				throw new DOMException('denied', 'NotAllowedError');
-			}
-		}
-	};
-	assert.equal(await copyText('x', failing), false);
-	assert.equal(await copyText('x', {}), false);
-	assert.equal(await copyText('x', /** @type {any} */ (null)), false);
 });
 
 /** A document, URL and timers that record what downloadFile does. @param {boolean} supportsDownload */
@@ -101,7 +146,7 @@ test('downloadFile: sense suport de download obre la URL en una pestanya nova', 
 });
 
 const IMAGE = new File(['x'], 'agenda-a1.png', { type: 'image/png' });
-const TEXT = 'Apunta’t a l’activitat aquí: https://example.test/?e=a1';
+const TEXT = FULL_TEXT;
 
 /**
  * A navigator that records what `share` receives. `outcome` is what `share` does: resolve (`undefined`)

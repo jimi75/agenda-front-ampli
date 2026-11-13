@@ -13,7 +13,9 @@ import {
 
 const ID = 'accio-1';
 const DETAIL_URL = `http://localhost:5300/agenda-front-ampli/?e=${ID}`;
-const WA_LINK = `https://wa.me/?text=${encodeURIComponent(T.share.text(DETAIL_URL))}`;
+const EXPECTED_TEXT =
+	`📢 *Paradeta al mercat* 📢\n\n🗓️ Dijous 12 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: ${DETAIL_URL}`;
+const WA_LINK = `https://wa.me/?text=${encodeURIComponent(EXPECTED_TEXT)}`;
 
 /**
  * Opens the detail of an event with `navigator.share` simulated, and counts the downloads and the
@@ -34,7 +36,6 @@ async function openDetail(page, { behaviour = ['ok'], files = true, query = `e=$
 		downloads,
 		share: detail.getByRole('button', { name: T.share.share, exact: true }),
 		ready: detail.getByRole('button', { name: T.share.ready }),
-		copy: detail.getByRole('button', { name: T.share.copyLink }),
 		waLink: detail.getByRole('link', { name: new RegExp(T.share.waLink) }),
 		live: detail.locator('.live')
 	};
@@ -43,7 +44,7 @@ async function openDetail(page, { behaviour = ['ok'], files = true, query = `e=$
 /** Waits until the mocked `navigator.share` has been called `count` times. @param {import('@playwright/test').Page} page @param {number} count */
 const sharedTimes = (page, count) => expect.poll(async () => (await shareCalls(page)).length).toBe(count);
 
-test('èxit: un sol share amb l’arxiu agenda-<id>.png i el text amb l’enllaç, i torna a repòs', async ({ page }) => {
+test('èxit: un sol share amb l’arxiu agenda-<id>.png i la plantilla completa, i torna a repòs', async ({ page }) => {
 	const { share, waLink, live, downloads } = await openDetail(page);
 	await share.click();
 	await sharedTimes(page, 1);
@@ -51,7 +52,7 @@ test('èxit: un sol share amb l’arxiu agenda-<id>.png i el text amb l’enlla�
 	const [call] = await shareCalls(page);
 	expect(call.files).toEqual([{ name: `agenda-${ID}.png`, type: 'image/png', size: expect.any(Number) }]);
 	expect(call.files[0].size).toBeGreaterThan(1000);
-	expect(call.text).toBe(T.share.text(DETAIL_URL));
+	expect(call.text).toBe(EXPECTED_TEXT);
 	expect(call.text).toContain(DETAIL_URL);
 
 	await expect(share).toBeEnabled();
@@ -63,7 +64,7 @@ test('èxit: un sol share amb l’arxiu agenda-<id>.png i el text amb l’enlla�
 });
 
 test('AbortError: no passa res i no hi ha enllaç de respatller', async ({ page }) => {
-	const { share, ready, waLink, live, copy, downloads } = await openDetail(page, { behaviour: ['AbortError'] });
+	const { share, ready, waLink, live, downloads } = await openDetail(page, { behaviour: ['AbortError'] });
 	await share.click();
 	await sharedTimes(page, 1);
 
@@ -71,7 +72,6 @@ test('AbortError: no passa res i no hi ha enllaç de respatller', async ({ page 
 	await expect(ready).toHaveCount(0);
 	await expect(waLink).toHaveCount(0);
 	await expect(live).toHaveText('');
-	await expect(copy).toBeVisible();
 	expect(downloads).toEqual([]);
 	expect(await shareCalls(page)).toHaveLength(1);
 });
@@ -79,13 +79,12 @@ test('AbortError: no passa res i no hi ha enllaç de respatller', async ({ page 
 test('NotAllowedError: queda «preparada» i el segon toc comparteix el MATEIX arxiu sense tornar a generar', async ({
 	page
 }) => {
-	const { share, ready, waLink, copy, downloads } = await openDetail(page, { behaviour: ['NotAllowedError', 'ok'] });
+	const { share, ready, waLink, downloads } = await openDetail(page, { behaviour: ['NotAllowedError', 'ok'] });
 	await share.click();
 
 	await expect(ready).toBeVisible();
 	await expect(ready).toBeEnabled();
 	await expect(share).toHaveCount(0);
-	await expect(copy).toBeVisible();
 	await expect(waLink).toHaveCount(0);
 	expect(await shareCalls(page)).toHaveLength(1);
 	expect(await postersRendered(page)).toBe(1);
@@ -106,7 +105,7 @@ test('NotAllowedError: queda «preparada» i el segon toc comparteix el MATEIX a
 });
 
 test('dos NotAllowedError seguits: el segon va a la descàrrega i el botó no torna a «preparada»', async ({ page }) => {
-	const { share, ready, waLink, live, copy, downloads } = await openDetail(page, {
+	const { share, ready, waLink, live, downloads } = await openDetail(page, {
 		behaviour: ['NotAllowedError', 'NotAllowedError']
 	});
 	await share.click();
@@ -119,7 +118,6 @@ test('dos NotAllowedError seguits: el segon va a la descàrrega i el botó no to
 	await expect(live).toHaveText(T.share.fallbackNote);
 	await expect(share).toBeEnabled();
 	await expect(ready).toHaveCount(0);
-	await expect(copy).toBeVisible();
 	expect(await shareCalls(page)).toHaveLength(2);
 	// The downloaded file is the one already made.
 	expect(await postersRendered(page)).toBe(1);
@@ -140,7 +138,7 @@ test('un altre error de share: descàrrega + enllaç wa.me només amb text + av�
 test('sense suport d’arxius: descarrega la imatge i mostra l’enllaç wa.me amb el text codificat i l’avís', async ({
 	page
 }) => {
-	const { share, waLink, live, copy } = await openDetail(page, { files: false });
+	const { share, waLink, live } = await openDetail(page, { files: false });
 	const [download] = await Promise.all([page.waitForEvent('download'), share.click()]);
 
 	expect(download.suggestedFilename()).toBe(`agenda-${ID}.png`);
@@ -149,7 +147,6 @@ test('sense suport d’arxius: descarrega la imatge i mostra l’enllaç wa.me a
 	await expect(waLink).toHaveAttribute('target', '_blank');
 	await expect(waLink).toHaveAttribute('rel', /noopener/);
 	await expect(live).toHaveText(T.share.fallbackNote);
-	await expect(copy).toBeVisible();
 	// `share` is never called when the browser does not accept the file.
 	expect(await shareCalls(page)).toHaveLength(0);
 	await expect(share).toBeEnabled();
@@ -160,40 +157,16 @@ test('si no es pot generar la imatge: missatge i enllaç wa.me només amb text, 
 		// Simulates a font that never loads (the same way image.spec.js does).
 		document.fonts.check = () => false;
 	});
-	const { share, waLink, live, copy, downloads } = await openDetail(page);
+	const { share, waLink, live, downloads } = await openDetail(page);
 	await share.click();
 
 	await expect(live).toHaveText(T.share.imageFailed);
 	await expect(waLink).toHaveAttribute('href', WA_LINK);
 	await expect(waLink).toHaveAttribute('target', '_blank');
-	await expect(copy).toBeVisible();
 	await expect(share).toBeEnabled();
 	await expect(page.locator('.poster')).toHaveCount(0);
 	expect(downloads).toEqual([]);
 	expect(await shareCalls(page)).toHaveLength(0);
-});
-
-test('«Copia l’enllaç» sempre és visible i copia l’URL sense ?admin, també amb la imatge preparada', async ({
-	page,
-	context
-}) => {
-	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-	const { share, ready, copy, live } = await openDetail(page, {
-		behaviour: ['NotAllowedError'],
-		query: `admin&e=${ID}`
-	});
-	await expect(copy).toBeVisible();
-
-	await share.click();
-	await expect(ready).toBeVisible();
-	await expect(copy).toBeVisible();
-
-	await copy.click();
-	await expect(live).toContainText(T.share.copied);
-	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(DETAIL_URL);
-	expect(DETAIL_URL).not.toContain('admin');
-	// Copying does not lose the prepared image.
-	await expect(ready).toBeVisible();
 });
 
 test('un doble toc mentre genera no llança una segona generació', async ({ page }) => {

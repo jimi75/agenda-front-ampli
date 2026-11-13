@@ -12,7 +12,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [my-signups.js](./my-signups.js): `readMine`, `addMine`, `removeMine`, `mineForEvent`; typedef `MySignup`.
 - [names.js](./names.js): `cleanName`, `validateName` (`'empty' | 'invalid_name'` errors).
 - [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'external' | 'closed' | 'open'`.
-- [share.js](./share.js): `detailUrl`, `shareText`, `waLink`, `copyText`, `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
+- [share.js](./share.js): `detailUrl`, `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
 - [poster.js](./poster.js): `renderPoster(node, id)` → `Promise<File>` (`agenda-<id>.png`).
 - [poster-scale.js](./poster-scale.js): `posterScale(name, place)` → scale factor of the poster text (`1.9`, `1.5`, `1.15` or `1`) by character count.
 - [texts.js](./texts.js): `T`, the single object with every Catalan UI string (including `T.signupErrors` keyed by error code).
@@ -39,7 +39,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [my-signups.js](./my-signups.js): reads and writes `localStorage` key `MY_SIGNUPS_KEY`.
 - [mock-api.js](./mock-api.js): `setTimeout` delay, mutates in-memory sign-ups, uses `crypto.randomUUID`, writes `MY_SIGNUPS_KEY`.
 - [poster.js](./poster.js): loads fonts (`document.fonts.load`), creates object URLs, an `Image` and a canvas, and renders through `html-to-image` `toBlob`.
-- [share.js](./share.js): `navigator.clipboard.writeText`, `navigator.share`, creates a temporary `<a download>` appended to `document.body`, `URL.createObjectURL` (revoked after 60 s) or `window.open`.
+- [share.js](./share.js): `navigator.share`, creates a temporary `<a download>` appended to `document.body`, `URL.createObjectURL` (revoked after 60 s) or `window.open`.
 - [month.js:todayIso](./month.js): reads the current time via `Intl.DateTimeFormat`.
 
 ## Verification

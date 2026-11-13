@@ -59,17 +59,17 @@ export const T = {
 	share: {
 		download: 'Descarrega la imatge',
 		share: 'Comparteix',
-		copyLink: 'Copia l’enllaç',
 		generating: 'Generant…',
 		ready: 'Imatge preparada: prem de nou',
-		copied: 'Enllaç copiat',
-		copyFailed: 'No s’ha pogut copiar. Copia’l a mà:',
 		imageFailed: 'No s’ha pogut generar la imatge. Torna-ho a provar.',
 		fallbackNote:
 			'Aquest navegador no pot compartir la imatge. S’ha descarregat: adjunta-la al missatge.',
 		waLink: 'Obre WhatsApp amb el text',
-		// Placeholder wording from the author.
-		text: (/** @type {string} */ url) => `Apunta’t a l’activitat aquí: ${url}`
+		title: (/** @type {string} */ name) => `📢 *${name}* 📢`,
+		date: (/** @type {string} */ label) => `🗓️ ${label}`,
+		time: (/** @type {string} */ range) => `⏰ ${range}`,
+		place: (/** @type {string} */ place) => `📍 ${place}`,
+		link: (/** @type {string} */ url) => `🔗 Més detalls i inscripcions: ${url}`
 	},
 	participation: {
 		mine: 'La teva participació',

@@ -128,7 +128,6 @@ for (const [id, note] of [
 		await expect(detail.getByRole('button', { name: T.participate })).toHaveCount(0);
 		await expect(detail.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
 		await expect(detail.getByRole('button', { name: T.share.share })).toHaveCount(0);
-		await expect(detail.getByRole('button', { name: T.share.copyLink })).toHaveCount(0);
 	});
 
 	test(`${id}: «Veure apuntats» obre el detall, no el modal d’inscripció`, async ({ page }) => {
@@ -181,37 +180,12 @@ test('obert amb ?e=, en tancar el focus va al títol de la pàgina', async ({ pa
 	await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
 });
 
-test('«Comparteix» és un botó (sense enllaç wa.me de principi) i «Copia l’enllaç» copia l’URL sense ?admin', async ({
-	page,
-	context
-}) => {
-	await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+test('«Comparteix» és un botó (sense enllaç wa.me de principi)', async ({ page }) => {
 	await openAgenda(page, { query: 'admin&e=accio-1' });
 	const detail = detailDialog(page);
-	const url = 'http://localhost:5300/agenda-front-ampli/?e=accio-1';
 
 	await expect(detail.getByRole('button', { name: T.share.share })).toBeEnabled();
 	await expect(detail.getByRole('link', { name: new RegExp(T.share.waLink) })).toHaveCount(0);
-
-	await detail.getByRole('button', { name: T.share.copyLink }).click();
-	await expect(detail.getByText(T.share.copied)).toBeVisible();
-	expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
-});
-
-test('si el porta-retalls falla, «Copia l’enllaç» mostra l’URL en un camp seleccionable', async ({ page }) => {
-	await openAgenda(page, { query: 'e=accio-1' });
-	await page.evaluate(() => {
-		Object.defineProperty(navigator, 'clipboard', {
-			value: { writeText: () => Promise.reject(new Error('denied')) },
-			configurable: true
-		});
-	});
-	const detail = detailDialog(page);
-	await detail.getByRole('button', { name: T.share.copyLink }).click();
-	await expect(detail.getByText(T.share.copyFailed)).toBeVisible();
-	const field = detail.getByRole('textbox', { name: T.share.copyLink });
-	await expect(field).toHaveValue('http://localhost:5300/agenda-front-ampli/?e=accio-1');
-	await expect(field).toHaveAttribute('readonly', '');
 });
 
 test('tancat per B1 = NO: el detall mostra «Les inscripcions estan tancades» i manté compartir', async ({
@@ -221,7 +195,7 @@ test('tancat per B1 = NO: el detall mostra «Les inscripcions estan tancades» i
 	const detail = detailDialog(page);
 	await expect(detail).toContainText(T.dialog.closed);
 	await expect(detail.getByRole('button', { name: T.participate })).toHaveCount(0);
-	await expect(detail.getByRole('button', { name: T.share.copyLink })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.share })).toBeVisible();
 });
 
 for (const width of [390, 1024, 1100, 1280]) {

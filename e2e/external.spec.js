@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { EVENT_HEADER_OPTIONAL } from '../apps-script/fake-google.js';
 import { T } from '../src/lib/texts.js';
-import { card, detailDialog, openAgenda, signupDialog } from './helpers.js';
+import { card, detailDialog, mockShare, openAgenda, shareCalls, signupDialog } from './helpers.js';
 
 const EXTERNAL_URL = 'https://example.org/inscripcio';
 
@@ -51,7 +51,19 @@ test('el detall amb URL externa mostra l’enllaç «Participar» i la nota, sen
 	await expect(detail.getByText(T.detail.listTitle)).toHaveCount(0);
 	await expect(detail.getByText(T.detail.listEmpty)).toHaveCount(0);
 	// Sharing is still offered for an external event.
-	await expect(detail.getByRole('button', { name: T.share.copyLink })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.share })).toBeVisible();
+});
+
+test('el text compartit d’un esdeveniment extern enllaça només a la inscripció externa', async ({ page }) => {
+	await mockShare(page);
+	await openAgenda(page, { query: 'e=ext-1' });
+	const detail = detailDialog(page);
+	await detail.getByRole('button', { name: T.share.share, exact: true }).click();
+	await expect.poll(async () => (await shareCalls(page)).length).toBe(1);
+
+	const [call] = await shareCalls(page);
+	expect(call.text).toContain(`🔗 Més detalls i inscripcions: ${EXTERNAL_URL}`);
+	expect(call.text).not.toContain('?e=ext-1');
 });
 
 test('pulsar «Participar» obre l’URL externa en una pestanya nova i no obre el modal', async ({ page, context }) => {

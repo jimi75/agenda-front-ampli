@@ -1,3 +1,4 @@
+import { formatRange } from './events.js';
 import { T } from './texts.js';
 
 /**
@@ -9,29 +10,36 @@ export function detailUrl(location, id) {
 	return `${location.origin}${location.pathname}?e=${encodeURIComponent(id)}`;
 }
 
-/** @param {string} url */
-export function shareText(url) {
-	return T.share.text(url);
+/**
+ * Builds the share text from the fixed template. Lines whose source field is empty are omitted,
+ * and empty blocks are dropped.
+ * @param {Pick<import('./events.js').AgendaEvent, 'name' | 'start' | 'end' | 'place' | 'externalUrl'>} event
+ * @param {string} dateLabel
+ * @param {string} url
+ * @returns {string}
+ */
+export function shareText(event, dateLabel, url) {
+	/** @param {string} value */
+	const oneLine = (value) => value.replace(/[\r\n]+/g, ' ').trim();
+	const name = oneLine(event.name);
+	const date = oneLine(dateLabel);
+	const place = oneLine(event.place);
+	const whenAndWhere = [
+		date ? T.share.date(date[0].toUpperCase() + date.slice(1)) : '',
+		T.share.time(formatRange(event.start, event.end)),
+		place ? T.share.place(place) : ''
+	].filter(Boolean);
+	const blocks = [
+		name ? [T.share.title(name)] : [],
+		whenAndWhere,
+		[T.share.link(event.externalUrl || url)]
+	];
+	return blocks.filter((lines) => lines.length).map((lines) => lines.join('\n')).join('\n\n');
 }
 
 /** @param {string} text */
 export function waLink(text) {
 	return `https://wa.me/?text=${encodeURIComponent(text)}`;
-}
-
-/**
- * @param {string} text
- * @param {{ clipboard?: Pick<Clipboard, 'writeText'> }} [nav]
- * @returns {Promise<boolean>}
- */
-export async function copyText(text, nav = globalThis.navigator) {
-	try {
-		if (!nav?.clipboard?.writeText) return false;
-		await nav.clipboard.writeText(text);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 /**

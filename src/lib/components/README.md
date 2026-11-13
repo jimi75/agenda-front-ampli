@@ -6,7 +6,7 @@ Svelte 5 (runes) presentational components of the agenda page. They receive data
 ## Interface
 - [Calendar.svelte](./Calendar.svelte): props `{ month, byDate, signups, mine, features, today, signupsOpen, ondetail, onparticipate, onunsign }`; renders weekday header and one `li#dia-<date>` per day with an [EventCard.svelte](./EventCard.svelte) per event (state from `participationState`; `mine` filtered by event; `canUnsign` = `features` includes `'unsignup'`).
 - [EventCard.svelte](./EventCard.svelte): props `{ event, count, dateLabel, state, mine, canUnsign, ondetail, onparticipate, onunsign }`; `detail` link (`?e=<id>`) opens the detail on a plain left click only; action is an external `Participar` link (`state === 'external'`), `Desapuntar-me` button (`'open'`, `canUnsign` and at least one record in `mine`), `Participar` button (`'open'` otherwise) or `Veure apuntats` button (other states).
-- [EventDetail.svelte](./EventDetail.svelte): props `{ event, names, state, dateLabel, url, notFound, onclose, onparticipate }`; modal with event data, participation block, sign-up list, copy link, «Descarrega la imatge» and «Comparteix» (share states `idle | ready | fallback | failed`).
+- [EventDetail.svelte](./EventDetail.svelte): props `{ event, names, state, dateLabel, url, notFound, onclose, onparticipate }`; modal with event data, participation block, sign-up list, «Descarrega la imatge» and «Comparteix» (share states `idle | ready | fallback | failed`).
 - [SignupDialog.svelte](./SignupDialog.svelte): props `{ event, dateLabel, features, mine, onsubmit, onunsign, onclose }`; name form (phases `idle | sending | done`) and, when `features` includes `'unsignup'`, the «La teva participació» list with a two-tap «Desapuntar-me».
 - [PosterView.svelte](./PosterView.svelte): props `{ event, dateLabel, node (bindable) }`; off-screen `POSTER.width × POSTER.height` poster captured by `renderPoster`. Font sizes and body margins are multiplied by `posterScale(event.name, event.place)` through `--k`.
 - [Header.svelte](./Header.svelte): static title and `T.monthLabel`.
@@ -22,7 +22,7 @@ Svelte 5 (runes) presentational components of the agenda page. They receive data
 - UI strings come from `T` in [texts.js](../texts.js); [Header.svelte](./Header.svelte) hardcodes the two title lines.
 
 ## Side Effects
-- [EventDetail.svelte](./EventDetail.svelte): calls `renderPoster`, `downloadFile`, `shareImage` and `copyText` (file download, system share panel, clipboard); moves focus to the close button / link field.
+- [EventDetail.svelte](./EventDetail.svelte): calls `renderPoster`, `downloadFile` and `shareImage` (file download, system share panel); moves focus to the close button.
 - [SignupDialog.svelte](./SignupDialog.svelte): sets and clears a confirm timer; focuses the name input.
 - [EventCard.svelte](./EventCard.svelte): sets and clears a confirm timer; invokes `onunsign`.
 - [Calendar.svelte](./Calendar.svelte), [PosterView.svelte](./PosterView.svelte), [Header.svelte](./Header.svelte), [Legend.svelte](./Legend.svelte): none beyond rendering and invoking callback props.
