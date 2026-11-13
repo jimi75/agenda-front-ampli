@@ -57,7 +57,6 @@ export const T = {
 		notFound: 'No s’ha trobat aquesta activitat.'
 	},
 	share: {
-		download: 'Descarrega la imatge',
 		share: 'Comparteix',
 		customImage: 'Tria una imatge pròpia per compartir',
 		customShare: 'Comparteix amb la imatge pròpia',

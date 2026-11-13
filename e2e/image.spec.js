@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { EVENT_HEADER_OPTIONAL } from '../apps-script/fake-google.js';
 import { POSTER } from '../src/lib/config.js';
 import { T } from '../src/lib/texts.js';
-import { card, detailDialog, hasInk, openAgenda, pixelAt, readPngSize } from './helpers.js';
+import { card, detailDialog, hasInk, mockShare, openAgenda, pixelAt, readPngSize } from './helpers.js';
 
 // A phone with 3x density: without `pixelRatio: 1` the PNG would not be 2048 × 1346.
 test.use({ deviceScaleFactor: 3 });
@@ -23,10 +23,10 @@ async function cssColor(page, name) {
 	return rgb(hex);
 }
 
-/** Opens the detail of an event, taps «Descarrega la imatge» and returns the downloaded file. */
+/** Opens the detail of an event, taps «Comparteix» (the browser cannot share files, so the image is downloaded) and returns the downloaded file. */
 async function downloadImage(/** @type {import('@playwright/test').Page} */ page, /** @type {string} */ id) {
 	await card(page, id).getByRole('link', { name: /^Veure el detall de/ }).click();
-	const button = detailDialog(page).getByRole('button', { name: T.share.download });
+	const button = detailDialog(page).getByRole('button', { name: T.share.share, exact: true });
 	const [download] = await Promise.all([page.waitForEvent('download'), button.click()]);
 	const path = await download.path();
 	return { name: download.suggestedFilename(), png: await readFile(path) };
@@ -37,6 +37,7 @@ for (const [id, type, variable] of /** @type {const} */ ([
 	['acte-1', 'Acte', '--rust']
 ])) {
 	test(`la imatge d’un ${type} baixa a 2048 × 1346, no és en blanc i té el color del tipus`, async ({ page }) => {
+		await mockShare(page, ['ok'], { files: false });
 		await openAgenda(page);
 		const { name, png } = await downloadImage(page, id);
 
@@ -46,11 +47,12 @@ for (const [id, type, variable] of /** @type {const} */ ([
 
 		// The poster is gone and the button is back to normal.
 		await expect(page.locator('.poster')).toHaveCount(0);
-		await expect(detailDialog(page).getByRole('button', { name: T.share.download })).toBeEnabled();
+		await expect(detailDialog(page).getByRole('button', { name: T.share.share, exact: true })).toBeEnabled();
 	});
 }
 
 test('un nom i un lloc llargs es retallen i queden dins la imatge', async ({ page }) => {
+	await mockShare(page, ['ok'], { files: false });
 	await openAgenda(page, {
 		prepare: ({ script }) => {
 			const row = script.sheets.get('Esdeveniments')?.rows.find((r) => r[0] === 'accio-1');
@@ -71,6 +73,7 @@ test('un nom i un lloc llargs es retallen i queden dins la imatge', async ({ pag
 });
 
 test('un nom i un lloc curts s’escalen i omplen la imatge sense sortir-ne', async ({ page }) => {
+	await mockShare(page, ['ok'], { files: false });
 	await openAgenda(page, {
 		prepare: ({ script }) => {
 			const row = script.sheets.get('Esdeveniments')?.rows.find((r) => r[0] === 'accio-1');
@@ -91,16 +94,17 @@ test('un nom i un lloc curts s’escalen i omplen la imatge sense sortir-ne', as
 });
 
 test('si no es pot generar la imatge, es diu i el botó queda a punt per tornar-ho a provar', async ({ page }) => {
+	await mockShare(page, ['ok'], { files: false });
 	// The font files fail to download. Stubbing `document.fonts.check` is not reliable: WebKit drops
 	// properties added to `document.fonts`, so the failure would only happen sometimes.
 	await page.route(/special-gothic-condensed-one-.*\.woff2?$/, (route) => route.abort());
 	await openAgenda(page);
 	await card(page, 'accio-1').getByRole('link', { name: /^Veure el detall de/ }).click();
 	const detail = detailDialog(page);
-	await detail.getByRole('button', { name: T.share.download }).click();
+	await detail.getByRole('button', { name: T.share.share, exact: true }).click();
 
 	await expect(detail).toContainText(T.share.imageFailed);
-	await expect(detail.getByRole('button', { name: T.share.download })).toBeEnabled();
+	await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toBeEnabled();
 	await expect(page.locator('.poster')).toHaveCount(0);
 });
 
@@ -108,5 +112,6 @@ test('en els estats sense compartir no hi ha botó d’imatge', async ({ page })
 	await openAgenda(page);
 	await card(page, 'cancel-1').getByRole('button', { name: /^Veure qui s’ha apuntat/ }).click();
 	await expect(detailDialog(page)).toBeVisible();
-	await expect(detailDialog(page).getByRole('button', { name: T.share.download })).toHaveCount(0);
+	await expect(detailDialog(page).getByRole('button', { name: T.share.share, exact: true })).toHaveCount(0);
+	await expect(detailDialog(page).getByRole('button', { name: T.share.customImage, exact: true })).toHaveCount(0);
 });

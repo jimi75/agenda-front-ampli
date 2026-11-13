@@ -273,7 +273,6 @@ test('mentre genera, el botó diu «Generant…» i està desactivat', async ({ 
 
 	const generating = detail.getByRole('button', { name: T.share.generating });
 	await expect(generating).toBeDisabled();
-	await expect(detail.getByRole('button', { name: T.share.download })).toBeDisabled();
 	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeDisabled();
 	await expect.poll(() => page.evaluate(() => '__release' in window)).toBe(true);
 	await page.evaluate(() => /** @type {any} */ (window).__release());
@@ -399,37 +398,23 @@ test('imatge pròpia en una inscripció externa: conserva el text i l’URL exte
 	await expect(waLink).toHaveCount(0);
 });
 
-for (const primaryAction of ['share', 'download']) {
-	test(`usar «${primaryAction === 'share' ? 'Comparteix' : 'Descarrega la imatge'}» descarta la preparació pròpia`, async ({
-		page
-	}) => {
-		const { detail, custom, customShare, share, downloads } = await openDetail(page);
-		await selectFile(page, custom, {
-			name: 'selected.png',
-			mimeType: 'image/png',
-			buffer: Buffer.from([1, 2])
-		});
-		await expect(customShare).toBeVisible();
-
-		if (primaryAction === 'share') {
-			await share.click();
-			await sharedTimes(page, 1);
-		} else {
-			const [download] = await Promise.all([
-				page.waitForEvent('download'),
-				detail.getByRole('button', { name: T.share.download }).click()
-			]);
-			expect(download.suggestedFilename()).toBe(`agenda-${ID}.png`);
-		}
-		await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
-		await expect(customShare).toHaveCount(0);
-		expect((await shareCalls(page)).map((call) => call.files[0].name)).toEqual(
-			primaryAction === 'share' ? [`agenda-${ID}.png`] : []
-		);
-		expect(await postersRendered(page)).toBe(1);
-		expect(downloads).toEqual(primaryAction === 'download' ? [`agenda-${ID}.png`] : []);
+test('usar «Comparteix» descarta la preparació pròpia', async ({ page }) => {
+	const { detail, custom, customShare, share, downloads } = await openDetail(page);
+	await selectFile(page, custom, {
+		name: 'selected.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from([1, 2])
 	});
-}
+	await expect(customShare).toBeVisible();
+
+	await share.click();
+	await sharedTimes(page, 1);
+	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
+	await expect(customShare).toHaveCount(0);
+	expect((await shareCalls(page)).map((call) => call.files[0].name)).toEqual([`agenda-${ID}.png`]);
+	expect(await postersRendered(page)).toBe(1);
+	expect(downloads).toEqual([]);
+});
 
 test('un error propi no emmascara l’error i el respatller posterior de l’acció principal', async ({ page }) => {
 	const { custom, share, live, waLink } = await openDetail(page, { behaviour: ['DataError', 'DataError'] });
@@ -764,15 +749,14 @@ test('dos NotAllowedError propisos: el segon falla, allibera el File i no oferei
 	expect(await sameShareFile(page)).toBe(true);
 });
 
-test('les tres accions d’imatge es desactiven mentre el compartir propi està pendent', async ({ page }) => {
-	const { detail, custom, downloads, share } = await openDetail(page, { pending: [0] });
+test('les dues accions d’imatge es desactiven mentre el compartir propi està pendent', async ({ page }) => {
+	const { custom, downloads, share } = await openDetail(page, { pending: [0] });
 	await shareOwnImage(page, custom, {
 		name: 'pending.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
 	});
 	await expect.poll(() => pendingShareCalls(page)).toEqual([0]);
-	await expect(detail.getByRole('button', { name: T.share.download })).toBeDisabled();
 	await expect(share).toBeDisabled();
 	await expect(custom).toBeDisabled();
 	await custom.evaluate((button) => {

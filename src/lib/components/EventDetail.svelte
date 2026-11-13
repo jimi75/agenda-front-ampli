@@ -26,10 +26,6 @@
 	/** @type {HTMLButtonElement | undefined} */
 	let closeButton = $state();
 	let generating = $state(false);
-	/** @type {'download' | 'share' | null} */
-	let generatingFor = $state(null);
-	/** A «Descarrega la imatge» that failed to generate. */
-	let imageFailed = $state(false);
 	/** @typedef {'idle' | 'ready' | 'fallback' | 'failed'} ShareView */
 	// Where «Comparteix» is. `ready`: the browser refused with `NotAllowedError` and the file waits
 	// for a second tap. `fallback`: the image was downloaded and the text goes through the `wa.me`
@@ -86,10 +82,8 @@
 		readyFile = null;
 		shareView = 'idle';
 		generating = false;
-		generatingFor = null;
 		sharing = false;
 		posterVisible = false;
-		imageFailed = false;
 	}
 
 	// The parent owns "which event is open"; this effect keeps the native dialog in sync.
@@ -135,13 +129,11 @@
 	/**
 	 * Renders the image of the open event. The poster is mounted only while it is generated.
 	 * Returns `null` if it failed, or if the detail closed meanwhile (nothing is shown then).
-	 * @param {'download' | 'share'} purpose
 	 * @returns {Promise<{ file: File | null, stale: boolean }>}
 	 */
-	async function generate(purpose) {
+	async function generate() {
 		const token = epoch;
 		generating = true;
-		generatingFor = purpose;
 		posterVisible = true;
 		try {
 			await tick();
@@ -153,20 +145,8 @@
 			if (token === epoch) {
 				posterVisible = false;
 				generating = false;
-				generatingFor = null;
 			}
 		}
-	}
-
-	/** The image is rendered again on every tap. */
-	async function download() {
-		if (busy || !event) return;
-		invalidateCustomForPrimary();
-		imageFailed = false;
-		const { file, stale } = await generate('download');
-		if (stale) return;
-		if (file) downloadFile(file);
-		else imageFailed = true;
 	}
 
 	/** @param {File} file */
@@ -186,8 +166,7 @@
 	async function shareFirst() {
 		if (!event) return;
 		shareView = 'idle';
-		imageFailed = false;
-		const { file, stale } = await generate('share');
+		const { file, stale } = await generate();
 		if (stale) return;
 		if (!file) {
 			shareView = 'failed';
@@ -319,7 +298,6 @@
 
 		readyFile = null;
 		shareView = 'idle';
-		imageFailed = false;
 		customReady = { file, second: false };
 		customImageView = 'ready';
 		customButton?.focus();
@@ -450,11 +428,8 @@
 
 				{#if canShare}
 					<section class="share">
-						<button type="button" class="action" disabled={busy} onclick={download}>
-							{generatingFor === 'download' ? T.share.generating : T.share.download}
-						</button>
 						<button type="button" class="action" disabled={busy} onclick={share}>
-							{generatingFor === 'share'
+							{generating
 								? T.share.generating
 								: shareView === 'ready'
 									? T.share.ready
@@ -498,7 +473,7 @@
 								<span class="sr-only">{T.share.customChosen}</span>
 							{:else if shareView === 'ready'}
 								<span class="sr-only">{T.share.ready}</span>
-							{:else if imageFailed || shareView === 'failed'}
+							{:else if shareView === 'failed'}
 								{T.share.imageFailed}
 							{:else if shareView === 'fallback'}
 								{T.share.fallbackNote}
