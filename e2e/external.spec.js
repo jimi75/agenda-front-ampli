@@ -51,7 +51,8 @@ test('el detall amb URL externa mostra l’enllaç «Participar» i la nota, sen
 	await expect(detail.getByText(T.detail.listTitle)).toHaveCount(0);
 	await expect(detail.getByText(T.detail.listEmpty)).toHaveCount(0);
 	// Sharing is still offered for an external event.
-	await expect(detail.getByRole('button', { name: T.share.share })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
 });
 
 test('el text compartit d’un esdeveniment extern enllaça només a la inscripció externa', async ({ page }) => {

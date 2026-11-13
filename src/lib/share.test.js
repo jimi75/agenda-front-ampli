@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detailUrl, downloadFile, shareImage, shareText, waLink } from './share.js';
+import { detailUrl, downloadFile, isImageFile, shareImage, shareText, waLink } from './share.js';
 
 test('detailUrl: origen + ruta + ?e=, sense arrossegar ?admin ni altres paràmetres', () => {
 	const location = { origin: 'https://jimi75.github.io', pathname: '/agenda-front-ampli/', search: '?admin&e=altre', hash: '#x' };
@@ -175,6 +175,61 @@ test('shareImage: shared, i envia un sol share amb l’arxiu i el text', async (
 	assert.deepEqual(calls[0], { files: [IMAGE], text: TEXT });
 });
 
+test('shareImage: envia els JPEG i PNG originals sense canviar-ne la identitat ni el text', async () => {
+	for (const file of [
+		new File(['jpeg-original-bytes'], 'original-photo.JPG', { type: 'image/jpeg' }),
+		new File(['png-original-bytes'], 'poster-free.png', { type: 'image/png' })
+	]) {
+		const { nav, calls } = fakeNav();
+		assert.equal(await shareImage(file, TEXT, { nav }), 'shared');
+		const call = calls.at(0);
+		assert.ok(call);
+		assert.equal(call.files?.at(0), file);
+		assert.equal(call.text, TEXT);
+	}
+});
+
+test('isImageFile: accepta tipus image vàlids sense limitar-ne l’extensió', () => {
+	for (const [name, type] of [
+		['photo.bin', 'image/jpeg'],
+		['photo.bin', 'IMAGE/PNG'],
+		['vector.svg', 'image/svg+xml'],
+		['photo.bin', 'image/vnd.microsoft.icon']
+	]) {
+		assert.equal(isImageFile(new File(['unchanged'], name, { type })), true, `${type} ${name}`);
+	}
+});
+
+test('isImageFile: només usa les cinc extensions acordades quan falta el tipus', () => {
+	for (const extension of ['jpg', 'jpeg', 'png', 'gif', 'webp']) {
+		assert.equal(isImageFile(new File(['x'], `photo.${extension}`)), true, extension);
+	}
+	for (const name of ['photo.JPG', 'photo.JpEg', 'photo.PNG', 'photo.GIF', 'photo.WEBP']) {
+		assert.equal(isImageFile(new File(['x'], name)), true, name);
+	}
+	for (const name of ['photo', 'photo.', 'photo.heic', 'photo.bmp', 'photo.jpg.exe']) {
+		assert.equal(isImageFile(new File(['x'], name)), false, name);
+	}
+});
+
+test('isImageFile: rebutja tipus no vàlids encara que el nom tingui una extensió admesa', () => {
+	for (const type of ['application/octet-stream', 'text/plain', 'image/', 'image//png', ' image/png ']) {
+		assert.equal(isImageFile(new File(['x'], 'photo.jpg', { type })), false, type);
+	}
+});
+
+test('isImageFile: no llegeix ni modifica el fitxer', () => {
+	const file = new File(['original-bytes'], 'photo.JPG');
+	Object.defineProperty(file, 'arrayBuffer', {
+		value: () => {
+			throw new Error('arrayBuffer must not be called');
+		}
+	});
+	const original = { name: file.name, type: file.type, size: file.size };
+	assert.equal(isImageFile(file), true);
+	assert.deepEqual({ name: file.name, type: file.type, size: file.size }, original);
+});
+
 test('shareImage: AbortError és aborted', async () => {
 	const { nav } = fakeNav('AbortError');
 	assert.equal(await shareImage(IMAGE, TEXT, { nav }), 'aborted');
@@ -203,6 +258,25 @@ test('shareImage: unsupported si canShare no accepta l’arxiu, sense cridar sha
 	assert.equal(calls.length, 0);
 	// Without canShare the files cannot be known to work: also unsupported.
 	assert.equal(await shareImage(IMAGE, TEXT, { nav: { share: async () => {} } }), 'unsupported');
+});
+
+test('shareImage: errors del probe són error i no criden share, també al segon intent', async () => {
+	for (const name of ['AbortError', 'NotAllowedError', 'Error']) {
+		for (const second of [false, true]) {
+			let shareCalls = 0;
+			const nav = {
+				canShare: () => {
+					if (name === 'Error') throw new Error('probe failed');
+					throw new DOMException('probe failed', name);
+				},
+				share: async () => {
+					shareCalls++;
+				}
+			};
+			assert.equal(await shareImage(IMAGE, TEXT, { nav, second }), 'error', `${name}, second=${second}`);
+			assert.equal(shareCalls, 0, `${name}, second=${second}`);
+		}
+	}
 });
 
 test('shareImage: amb second: true, NotAllowedError és error i no un altre segon toc', async () => {

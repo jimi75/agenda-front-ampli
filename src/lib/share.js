@@ -43,6 +43,16 @@ export function waLink(text) {
 }
 
 /**
+ * Whether the browser-reported type or, only when it is absent, the final filename extension
+ * identifies an accepted image. This does not inspect or modify the file contents.
+ * @param {File} file @returns {boolean}
+ */
+export function isImageFile(file) {
+	if (file.type) return /^image\/[a-z0-9!#$%&'*+.^_`|~-]+$/i.test(file.type);
+	return /\.(?:jpe?g|png|gif|webp)$/i.test(file.name);
+}
+
+/**
  * Shares an image with the text through the system panel (Web Share API with files).
  * Nothing is awaited before `nav.share` is called, so a tap that calls this keeps its user
  * activation. `canShare` is checked here, with the file already made, and not before generating it.
@@ -55,7 +65,15 @@ export function waLink(text) {
  * @returns {Promise<'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'>}
  */
 export async function shareImage(file, text, { nav = globalThis.navigator, second = false } = {}) {
-	if (!nav?.share || !nav.canShare?.({ files: [file] })) return 'unsupported';
+	let supported;
+	try {
+		if (!nav?.share || !nav.canShare) return 'unsupported';
+		supported = nav.canShare({ files: [file] });
+	} catch {
+		return 'error';
+	}
+	if (!supported) return 'unsupported';
+
 	try {
 		await nav.share({ files: [file], text });
 		return 'shared';

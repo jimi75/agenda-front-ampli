@@ -1,8 +1,8 @@
 <script>
-	import { tick, untrack } from 'svelte';
+	import { flushSync, tick, untrack } from 'svelte';
 	import { formatRange } from '#lib/events.js';
 	import { renderPoster } from '#lib/poster.js';
-	import { downloadFile, shareImage, shareText, waLink } from '#lib/share.js';
+	import { downloadFile, isImageFile, shareImage, shareText, waLink } from '#lib/share.js';
 	import { T } from '#lib/texts.js';
 	import PosterView from './PosterView.svelte';
 
@@ -41,6 +41,20 @@
 	let readyFile = null;
 	/** Changes whenever the detail closes or shows another event, so a late result is dropped. */
 	let epoch = 0;
+	/** @typedef {'idle' | 'picking' | 'ready' | 'failed'} CustomImageView */
+	/** @typedef {{ epoch: number, token: number, input?: HTMLInputElement }} PickerDescriptor */
+	/** @typedef {{ epoch: number, token: number }} CustomFlight */
+	let customImageView = $state(/** @type {CustomImageView} */ ('idle'));
+	/** The original file is retained only while the custom retry is ready. @type {File | null} */
+	let customReadyFile = null;
+	let customToken = 0;
+	/** @type {PickerDescriptor | null} */
+	let picker = $state.raw(null);
+	/** Owns `sharing` cleanup until this custom system-share call settles. @type {CustomFlight | null} */
+	let customFlight = null;
+	/** @type {HTMLButtonElement | undefined} */
+	let customButton = $state();
+	let previouslyEligible = false;
 	let posterVisible = $state(false);
 	/** @type {HTMLElement | undefined} */
 	let posterNode = $state();
@@ -50,8 +64,21 @@
 	const showWaLink = $derived(shareView === 'fallback' || shareView === 'failed');
 	const text = $derived(event ? shareText(event, dateLabel, url) : '');
 
+	function clearPicker() {
+		if (picker?.input) {
+			picker.input.value = '';
+			picker.input = undefined;
+		}
+		picker = null;
+	}
+
 	function resetShare() {
 		epoch++;
+		customToken++;
+		clearPicker();
+		customImageView = 'idle';
+		customReadyFile = null;
+		customFlight = null;
 		readyFile = null;
 		shareView = 'idle';
 		generating = false;
@@ -74,9 +101,26 @@
 	});
 
 	// Another event in the same open dialog: nothing of the previous one is kept.
+	/** @type {string | null} */
+	let resetEventId = null;
 	$effect(() => {
-		void event?.id;
+		const id = event?.id ?? null;
+		if (id === resetEventId) return;
+		resetEventId = id;
 		untrack(resetShare);
+	});
+
+	$effect(() => {
+		const eligible = canShare;
+		if (previouslyEligible && !eligible) {
+			untrack(() => {
+				customToken++;
+				clearPicker();
+				customImageView = 'idle';
+				customReadyFile = null;
+			});
+		}
+		previouslyEligible = eligible;
 	});
 
 	function handleClose() {
@@ -113,6 +157,7 @@
 	/** The image is rendered again on every tap. */
 	async function download() {
 		if (busy || !event) return;
+		invalidateCustomForPrimary();
 		imageFailed = false;
 		const { file, stale } = await generate('download');
 		if (stale) return;
@@ -124,6 +169,13 @@
 	function fallbackWithDownload(file) {
 		downloadFile(file);
 		shareView = 'fallback';
+	}
+
+	function invalidateCustomForPrimary() {
+		customToken++;
+		clearPicker();
+		customImageView = 'idle';
+		customReadyFile = null;
 	}
 
 	/** First tap: generates the image and shares it. */
@@ -168,8 +220,147 @@
 
 	function share() {
 		if (busy || !event) return;
+		invalidateCustomForPrimary();
 		if (shareView === 'ready') shareSecond();
 		else shareFirst();
+	}
+
+	/** @param {PickerDescriptor} descriptor */
+	function isCurrentPicker(descriptor) {
+		return (
+			picker !== null &&
+			picker.epoch === descriptor.epoch &&
+			picker.token === descriptor.token &&
+			descriptor.epoch === epoch &&
+			descriptor.token === customToken &&
+			dialog?.open === true &&
+			event !== null &&
+			canShare
+		);
+	}
+
+	function customImage() {
+		if (!dialog?.open || !event || !canShare || generating || sharing) return;
+		if (customImageView === 'ready') {
+			const file = customReadyFile;
+			if (!file) return;
+			customToken++;
+			const token = customToken;
+			customReadyFile = null;
+			customImageView = 'idle';
+			startCustomShare(file, token, true);
+			return;
+		}
+
+		customToken++;
+		const descriptor = /** @type {PickerDescriptor} */ ({ epoch, token: customToken });
+		customReadyFile = null;
+		customImageView = 'picking';
+		try {
+			flushSync(() => {
+				picker = descriptor;
+			});
+		} catch {
+			if (descriptor.epoch === epoch && descriptor.token === customToken) {
+				clearPicker();
+				customImageView = 'failed';
+			}
+			return;
+		}
+		if (!isCurrentPicker(descriptor)) return;
+		try {
+			if (!descriptor.input) throw new Error('picker_unavailable');
+			descriptor.input.click();
+		} catch {
+			if (isCurrentPicker(descriptor)) {
+				clearPicker();
+				customImageView = 'failed';
+			}
+		}
+	}
+
+	/** @param {PickerDescriptor} descriptor */
+	function cancelPicker(descriptor) {
+		if (!isCurrentPicker(descriptor)) return;
+		if (descriptor.input) descriptor.input.value = '';
+		descriptor.input = undefined;
+		picker = null;
+		customImageView = 'idle';
+		if (dialog?.open && event && canShare && descriptor.epoch === epoch) customButton?.focus();
+	}
+
+	/** @param {PickerDescriptor} descriptor */
+	function changePicker(descriptor) {
+		if (!isCurrentPicker(descriptor) || busy) return;
+		const input = descriptor.input;
+		const file = input?.files?.[0] ?? null;
+		if (input) input.value = '';
+		descriptor.input = undefined;
+		picker = null;
+
+		if (!file) {
+			customImageView = 'idle';
+			if (dialog?.open && event && canShare && descriptor.epoch === epoch) customButton?.focus();
+			return;
+		}
+		if (!isImageFile(file)) {
+			customReadyFile = null;
+			customImageView = 'failed';
+			return;
+		}
+
+		readyFile = null;
+		shareView = 'idle';
+		imageFailed = false;
+		customReadyFile = null;
+		customImageView = 'idle';
+		startCustomShare(file, descriptor.token, false);
+	}
+
+	/**
+	 * Calls the system API immediately, retaining only this flight's cleanup identity.
+	 * @param {File} file @param {number} token @param {boolean} second
+	 */
+	function startCustomShare(file, token, second) {
+		const flight = { epoch, token };
+		customFlight = flight;
+		sharing = true;
+		const pending = shareImage(file, text, second ? { second: true } : undefined);
+		pending.then(
+			(outcome) => settleCustomShare(flight, file, second, outcome),
+			() => settleCustomShare(flight, file, second, 'error')
+		);
+	}
+
+	/**
+	 * Busy cleanup belongs to the flight; rendering its outcome additionally requires current UI state.
+	 * @param {CustomFlight} flight @param {File} file @param {boolean} second
+	 * @param {'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'} outcome
+	 */
+	function settleCustomShare(flight, file, second, outcome) {
+		if (flight.epoch === epoch && customFlight === flight) {
+			customFlight = null;
+			sharing = false;
+		}
+		if (
+			flight.epoch !== epoch ||
+			flight.token !== customToken ||
+			!dialog?.open ||
+			!event ||
+			!canShare
+		) {
+			return;
+		}
+
+		customReadyFile = null;
+		if (outcome === 'needs-second-tap' && !second) {
+			customReadyFile = file;
+			customImageView = 'ready';
+		} else if (outcome === 'unsupported' || outcome === 'error') {
+			customImageView = 'failed';
+		} else {
+			customImageView = 'idle';
+		}
 	}
 
 	/** @param {MouseEvent} clickEvent */
@@ -261,18 +452,47 @@
 									? T.share.ready
 									: T.share.share}
 						</button>
+						<div class="custom-row">
+							<button
+								type="button"
+								class="custom-action"
+								bind:this={customButton}
+								disabled={busy}
+								onclick={customImage}
+							>
+								{customImageView === 'ready' ? T.share.customRetry : T.share.customImage}
+							</button>
+						</div>
+						{#if picker}
+							{@const descriptor = picker}
+							{#key descriptor.token}
+								<input
+									class="custom-file-input"
+									type="file"
+									accept="image/*,.jpg,.jpeg,.png,.gif,.webp"
+									tabindex="-1"
+									aria-hidden="true"
+									bind:this={descriptor.input}
+									oncancel={() => cancelPicker(descriptor)}
+									onchange={() => changePicker(descriptor)}
+								/>
+							{/key}
+						{/if}
 						{#if showWaLink}
 							<a class="action" href={waLink(text)} target="_blank" rel="noopener noreferrer"
 								>{T.share.waLink}<span class="sr-only"> {T.newTab}</span></a
 							>
 						{/if}
 						<p class="live" aria-live="polite">
-							{#if shareView === 'ready'}<span class="sr-only">{T.share.ready}</span>{/if}
-							{imageFailed || shareView === 'failed'
-								? T.share.imageFailed
-								: shareView === 'fallback'
-									? T.share.fallbackNote
-									: ''}
+							{#if customImageView === 'failed'}
+								{T.share.customFailed}
+							{:else if customImageView === 'ready' || shareView === 'ready'}
+								<span class="sr-only">{T.share.ready}</span>
+							{:else if imageFailed || shareView === 'failed'}
+								{T.share.imageFailed}
+							{:else if shareView === 'fallback'}
+								{T.share.fallbackNote}
+							{/if}
 						</p>
 					</section>
 				{/if}
@@ -520,6 +740,34 @@
 	.action:disabled {
 		opacity: 0.6;
 		cursor: progress;
+	}
+
+	.custom-row {
+		flex-basis: 100%;
+	}
+
+	.custom-action {
+		min-height: 44px;
+		padding: 0 0.1rem;
+		border: 0;
+		background: transparent;
+		color: var(--rust);
+		font: 700 0.95rem/1.2 var(--font-text);
+		text-align: left;
+		text-decoration: underline;
+		text-underline-offset: 0.18em;
+		cursor: pointer;
+	}
+
+	.custom-file-input {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 
 	.live {

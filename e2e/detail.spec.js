@@ -127,7 +127,8 @@ for (const [id, note] of [
 		await expect(detail).toContainText(T.detail.listEmpty);
 		await expect(detail.getByRole('button', { name: T.participate })).toHaveCount(0);
 		await expect(detail.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
-		await expect(detail.getByRole('button', { name: T.share.share })).toHaveCount(0);
+		await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toHaveCount(0);
+		await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toHaveCount(0);
 	});
 
 	test(`${id}: «Veure apuntats» obre el detall, no el modal d’inscripció`, async ({ page }) => {
@@ -184,7 +185,8 @@ test('«Comparteix» és un botó (sense enllaç wa.me de principi)', async ({ p
 	await openAgenda(page, { query: 'admin&e=accio-1' });
 	const detail = detailDialog(page);
 
-	await expect(detail.getByRole('button', { name: T.share.share })).toBeEnabled();
+	await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toBeEnabled();
+	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeEnabled();
 	await expect(detail.getByRole('link', { name: new RegExp(T.share.waLink) })).toHaveCount(0);
 });
 
@@ -195,7 +197,15 @@ test('tancat per B1 = NO: el detall mostra «Les inscripcions estan tancades» i
 	const detail = detailDialog(page);
 	await expect(detail).toContainText(T.dialog.closed);
 	await expect(detail.getByRole('button', { name: T.participate })).toHaveCount(0);
-	await expect(detail.getByRole('button', { name: T.share.share })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
+});
+
+test('un esdeveniment amb inscripció externa també ofereix les dues accions d’imatge', async ({ page }) => {
+	await openAgenda(page, { query: 'e=ext-1' });
+	const detail = detailDialog(page);
+	await expect(detail.getByRole('button', { name: T.share.share, exact: true })).toBeVisible();
+	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
 });
 
 for (const width of [390, 1024, 1100, 1280]) {

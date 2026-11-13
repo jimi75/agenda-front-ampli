@@ -101,28 +101,64 @@ export async function hasInk(page, png, region, background) {
  * Every call is kept in `window.__shareCalls` as `{files, text}` with the real `File` objects, so a
  * test can tell whether two calls got the very same file. With `files: false`, `canShare` refuses files.
  * @param {import('@playwright/test').Page} page
- * @param {string[]} [behaviour] @param {{ files?: boolean }} [options]
+ * @param {string[]} [behaviour] @param {{ files?: boolean, pending?: number[] }} [options]
  */
-export async function mockShare(page, behaviour = ['ok'], { files = true } = {}) {
+export async function mockShare(page, behaviour = ['ok'], { files = true, pending = [] } = {}) {
 	await page.addInitScript(
-		({ behaviour, files }) => {
+		({ behaviour, files, pending }) => {
 			/** @type {Array<{ files: File[], text?: string }>} */
 			const calls = [];
+			/** @type {Map<number, { resolve: () => void, reject: (error: DOMException) => void }>} */
+			const unsettled = new Map();
 			Object.assign(window, { __shareCalls: calls });
+			Object.assign(window, { __pendingShareCalls: unsettled });
 			Object.defineProperty(navigator, 'canShare', {
 				configurable: true,
 				value: (/** @type {ShareData} */ data) => files || !data?.files?.length
 			});
 			Object.defineProperty(navigator, 'share', {
 				configurable: true,
-				value: async (/** @type {ShareData} */ data) => {
-					const outcome = behaviour[calls.length] ?? 'ok';
+				value: (/** @type {ShareData} */ data) => {
+					const index = calls.length;
 					calls.push({ files: [...(data.files ?? [])], text: data.text });
-					if (outcome !== 'ok') throw new DOMException('simulated', outcome);
+					if (pending.includes(index)) {
+						return new Promise((resolve, reject) => {
+							unsettled.set(index, { resolve: () => resolve(), reject });
+						});
+					}
+					const outcome = behaviour[index] ?? 'ok';
+					return outcome === 'ok'
+						? Promise.resolve()
+						: Promise.reject(new DOMException('simulated', outcome));
 				}
 			});
 		},
-		{ behaviour, files }
+		{ behaviour, files, pending }
+	);
+}
+
+/** @param {import('@playwright/test').Page} page */
+export function pendingShareCalls(page) {
+	return page.evaluate(() =>
+		[.../** @type {any} */ (window).__pendingShareCalls.keys()].sort((a, b) => a - b)
+	);
+}
+
+/**
+ * Resolves or rejects one held share call; unknown and settled indices are test errors.
+ * @param {import('@playwright/test').Page} page @param {number} index @param {string} [outcome]
+ */
+export async function settleShare(page, index, outcome = 'ok') {
+	await page.evaluate(
+		([callIndex, result]) => {
+			const pending = /** @type {any} */ (window).__pendingShareCalls;
+			const entry = pending.get(callIndex);
+			if (!entry) throw new Error(`No unsettled share call at index ${callIndex}`);
+			pending.delete(callIndex);
+			if (result === 'ok') entry.resolve();
+			else entry.reject(new DOMException('simulated', result));
+		},
+		[index, outcome]
 	);
 }
 
@@ -173,4 +209,3 @@ export async function trackPosters(page) {
 
 /** @param {import('@playwright/test').Page} page */
 export const postersRendered = (page) => page.evaluate(() => /** @type {any} */ (window).__posters);
-

@@ -12,7 +12,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [my-signups.js](./my-signups.js): `readMine`, `addMine`, `removeMine`, `mineForEvent`; typedef `MySignup`.
 - [names.js](./names.js): `cleanName`, `validateName` (`'empty' | 'invalid_name'` errors).
 - [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'external' | 'closed' | 'open'`.
-- [share.js](./share.js): `detailUrl`, `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
+- [share.js](./share.js): `detailUrl`, `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `isImageFile` (reported image MIME or the approved final-extension fallback only when MIME is empty), `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
 - [poster.js](./poster.js): `renderPoster(node, id)` → `Promise<File>` (`agenda-<id>.png`).
 - [poster-scale.js](./poster-scale.js): `posterScale(name, place)` → scale factor of the poster text (`1.9`, `1.5`, `1.15` or `1`) by character count.
 - [texts.js](./texts.js): `T`, the single object with every Catalan UI string (including `T.signupErrors` keyed by error code).
@@ -30,7 +30,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [my-signups.js](./my-signups.js) storage format is `{ v: 1, items }`; corrupt JSON, wrong version, missing storage or malformed items read as an empty list, and all storage failures are swallowed.
 - [state.js:participationState](./state.js) priority is past, cancelled, external, closed, open.
 - [poster.js](./poster.js) rejects with `Error('image_failed')` when the font is missing, the PNG is fully transparent after one retry, or 20 s (`TIMEOUT_MS`) elapse.
-- [share.js:shareImage](./share.js) awaits nothing before `nav.share` so the tap keeps its user activation; with `second: true` a `NotAllowedError` becomes `'error'`.
+- [share.js:shareImage](./share.js) awaits nothing before `nav.share` so the tap keeps its user activation; capability-probe exceptions are `'error'`, and only a `NotAllowedError` from `share` becomes `'needs-second-tap'` on the first attempt. With `second: true`, it becomes `'error'`.
 - [share.js:detailUrl](./share.js) uses only `origin` + `pathname` + `?e=<id>`, never other query parameters (such as `?admin`).
 - [mock-api.js](./mock-api.js) mirrors the `Code.gs` contract and advertises `features: ['unsignup']`.
 
