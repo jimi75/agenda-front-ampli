@@ -353,7 +353,7 @@
 		}
 
 		customReadyFile = null;
-		if (outcome === 'needs-second-tap' && !second) {
+		if (!second && (outcome === 'needs-second-tap' || outcome === 'aborted')) {
 			customReadyFile = file;
 			customImageView = 'ready';
 		} else if (outcome === 'unsupported' || outcome === 'error') {

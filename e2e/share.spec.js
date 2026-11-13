@@ -500,27 +500,22 @@ test('si no es pot obrir el selector, mostra només l’error propi', async ({ p
 	await expect(waLink).toHaveCount(0);
 });
 
-test('AbortError del panell és silenciós en el primer i el segon intent', async ({ page }) => {
-	const { custom, live } = await openDetail(page, { behaviour: ['AbortError', 'NotAllowedError', 'AbortError'] });
+test('AbortError del primer intento prepara un toque explícito; cancelar el segundo es silencioso', async ({ page }) => {
+	const { custom, live } = await openDetail(page, { behaviour: ['AbortError', 'AbortError'] });
 	await selectFile(page, custom, {
 		name: 'cancelled.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
 	});
 	await sharedTimes(page, 1);
-	await expect(custom).toHaveText(T.share.customImage);
+	const retry = page.getByRole('button', { name: T.share.customRetry, exact: true });
+	await expect(retry).toHaveText(T.share.customRetry);
+	await expect(live).toHaveText(T.share.ready);
+	await retry.click();
+	await sharedTimes(page, 2);
+	await expect(page.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
 	await expect(live).toHaveText('');
-
-	await selectFile(page, custom, {
-		name: 'cancelled.png',
-		mimeType: 'image/png',
-		buffer: Buffer.from([1])
-	});
-	await expect(page.getByRole('button', { name: T.share.customRetry })).toBeVisible();
-	await page.getByRole('button', { name: T.share.customRetry }).click();
-	await sharedTimes(page, 3);
-	await expect(custom).toHaveText(T.share.customImage);
-	await expect(live).toHaveText('');
+	expect(await sameShareFile(page)).toBe(true);
 });
 
 test('un nou toc substitueix un selector sense cancel: els esdeveniments tardans del vell no afecten el nou', async ({
@@ -553,9 +548,9 @@ test('un nou toc substitueix un selector sense cancel: els esdeveniments tardans
 	await expect(live).toHaveText('');
 });
 
-for (const firstOutcome of ['success', 'failure', 'cancel']) {
+for (const firstOutcome of ['success', 'failure']) {
 	test(`es pot tornar a triar el mateix nom després de ${firstOutcome}`, async ({ page }) => {
-		const behaviour = firstOutcome === 'failure' ? ['DataError', 'ok'] : firstOutcome === 'cancel' ? ['AbortError', 'ok'] : ['ok', 'ok'];
+		const behaviour = firstOutcome === 'failure' ? ['DataError', 'ok'] : ['ok', 'ok'];
 		const { custom } = await openDetail(page, { behaviour });
 		const payload = {
 			name: 'same-local-name.jpg',
@@ -563,13 +558,9 @@ for (const firstOutcome of ['success', 'failure', 'cancel']) {
 			buffer: Buffer.from([1, 2, 3])
 		};
 		await selectFile(page, custom, payload);
-		if (firstOutcome === 'cancel') {
-			await expect(custom).toHaveText(T.share.customImage);
-		} else {
-			await sharedTimes(page, 1);
-			if (firstOutcome === 'failure') {
-				await expect(page.locator('.live')).toHaveText(T.share.customFailed);
-			}
+		await sharedTimes(page, 1);
+		if (firstOutcome === 'failure') {
+			await expect(page.locator('.live')).toHaveText(T.share.customFailed);
 		}
 		await selectFile(page, custom, payload);
 		await sharedTimes(page, 2);

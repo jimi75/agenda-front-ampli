@@ -27,7 +27,9 @@ a separate action rather than changing the default.
 * Use no application server upload or persistent image storage.
 * On failure, show only “No s’ha pogut compartir la imatge” inline. Do not
   download an image, open WhatsApp, or automatically invoke normal sharing.
-* Treat cancellation as cancellation, without a failure message.
+* Treat picker cancellation as cancellation, without a failure message. If the
+  first native share call aborts after returning from the picker, offer one
+  deliberate retry rather than leaving no visible recovery action.
 * If another deliberate tap is needed, offer “Torna a compartir” with the same
   temporarily held file. A failed second attempt must not create a retry loop.
 * Clear temporary file references when closing or switching events, or when
@@ -65,13 +67,16 @@ a separate action rather than changing the default.
 ### CUJ 2: Cancel
 
 * **Given:** The picker or system share panel is open.
-* **When:** The person cancels.
+* **When:** The person cancels the picker or the second system-share attempt.
 * **Then:** No replacement action runs, no error is displayed, and normal
-  sharing remains available.
+  sharing remains available. An `AbortError` from the first share attempt
+  instead retains the file and offers “Torna a compartir”; native platforms
+  may abort this picker-to-share handoff before showing a share panel.
 
 ### CUJ 3: Retry with a deliberate tap
 
-* **Given:** The first share attempt reports that another tap may be needed.
+* **Given:** The first share attempt reports that another tap may be needed or
+  aborts while returning from the native picker.
 * **When:** The person activates “Torna a compartir”.
 * **Then:** The same file is shared without reopening the picker. A failed
   second attempt shows the brief error and releases the retained file.
@@ -199,11 +204,11 @@ Implementation, step 3.
 | Outcome | Custom behavior |
 |---|---|
 | `shared` | Return to idle; clear file and input references. Do not claim the destination published a post. |
-| `aborted` | Return to idle, release references, and show no error or fallback. |
+| `aborted` on first attempt | Hold the original file and show “Torna a compartir”; picker-to-share activation can be lost when a native mobile picker returns. |
+| `aborted` on second attempt | Return to idle silently and release references. |
 | `needs-second-tap` on first attempt | Hold the original file in memory and show “Torna a compartir”. Announce that the image is ready. |
 | `unsupported` or `error` | Release references and show only the agreed inline error. |
 | Any failed second attempt | Show the error and release the file; never return to ready. |
-| Cancelled second attempt | Return to idle silently and release the file. |
 
 For the second tap, invoke `shareImage` with the same `File`, the current
 event text, and `{ second: true }`, with no preceding asynchronous work.
@@ -448,7 +453,7 @@ Implement the following transitions:
    the active custom flight. Then apply the architecture outcome table only
    if the custom token also matches and the detail is open and eligible.
    Cleanup ownership is independent of permission to display the result.
-7. Retain a file only after first-attempt `needs-second-tap`. In `ready`, the
+7. Retain a file after first-attempt `needs-second-tap` or `aborted`. In `ready`, the
    custom button checks the same eligibility/busy guards, advances its token,
    captures the same retained file, clears the ready reference, installs its
    flight identity, and sets `sharing` before calling `shareImage` with current
@@ -526,7 +531,10 @@ Cover each of these cases once, grouped by the behavior under test:
 * Picker cancel and empty selection do not share, download, or show an error.
   Cancelling a picker opened while a generated poster is ready preserves
   that existing primary retry.
-* Cancelling the system share panel is silent on first and second attempts.
+* Picker cancellation and a cancelled second share attempt are silent. An
+  `AbortError` on the first attempt offers the same one-tap recovery as
+  `NotAllowedError`, because native picker return can abort before a share
+  panel is shown.
 * Omit both picker cancellation events, then deliberately activate custom
   sharing again and select successfully. A late event from the previous
   input cannot send or reset the replacement.
