@@ -1,13 +1,13 @@
 # e2e
 
 ## Overview
-Playwright browser tests (`*.spec.js`) plus the non-test infrastructure they rely on: a server launcher and an in-browser stand-in for the Google Apps Script. No Google server runs: requests to the fake script URL are answered inside the browser by the real `apps-script/Code.gs` against a fake sheet ([apps-script](../apps-script/README.md)). Specs: `detail`, `external`, `image`, `share`, `signup`.
+Playwright browser tests (`*.spec.js`) plus the non-test infrastructure they rely on: a server launcher and an in-browser stand-in for the Google Apps Script. No Google server runs: requests to the fake script URL are answered inside the browser by the real `apps-script/Code.gs` against a fake sheet ([apps-script](../apps-script/README.md)). Specs: `detail`, `district`, `external`, `image`, `share`, `signup`.
 
 ## Interface
 - [serve.js](./serve.js): Playwright `webServer` command; runs `vite build` with `NODE_ENV=production`, `BASE_PATH=/agenda-front-ampli`, `VITE_AGENDA_API_URL=http://localhost:5301/exec`, then `vite preview --port 5300 --strictPort`.
-- [script.js](./script.js): `SCRIPT_URL`, `installScript(page, options)` → `{ script, signups(), baixes() }`; `ScriptOptions` `{ closed, busy, down, loseAnswer, features }`. Seeds events `accio-1`, `acte-1`, `cancel-1`, `pasat-1`, `resp-1`, `ext-1`.
-- [helpers.js](./helpers.js): `MINE_KEY`, `TODAY` (`2026-11-10T09:00:00+01:00`), `openAgenda(page, config)`, `cards`, `card`, `detailDialog`, `signupDialog`, `readMine`, `readPngSize`, `pixelAt`, `hasInk`, `mockShare` (including pending call indices), `shareCalls`, `pendingShareCalls`, `settleShare`, `sameShareFile`, `trackPosters`, `postersRendered`.
-- Specs: [detail.spec.js](./detail.spec.js), [external.spec.js](./external.spec.js), [image.spec.js](./image.spec.js), [share.spec.js](./share.spec.js), [signup.spec.js](./signup.spec.js).
+- [script.js](./script.js): `SCRIPT_URL`, `installScript(page, options)` → `{ script, signups(), baixes() }`; `ScriptOptions` `{ closed, busy, down, loseAnswer, features, noDistrict }` (`noDistrict` removes `district` from the GET answer, like an older script). Seeds events `accio-1`, `acte-1`, `cancel-1`, `pasat-1`, `resp-1`, `ext-1` in `Esdeveniments` and `eix-paradeta` (day 12) and `eix-xerrada` (day 20) in `Esdeveniments eixample`.
+- [helpers.js](./helpers.js): `MINE_KEY`, `TODAY` (`2026-11-10T09:00:00+01:00`), `openAgenda(page, config)` (`path` is the page to open, `./` by default, `./eixample` for a district; `waitForCards: false` does not wait for the first card), `cards`, `card`, `detailDialog`, `signupDialog`, `readMine`, `readPngSize`, `pixelAt`, `hasInk`, `mockShare` (including pending call indices), `shareCalls`, `pendingShareCalls`, `settleShare`, `sameShareFile`, `trackPosters`, `postersRendered`.
+- Specs: [detail.spec.js](./detail.spec.js), [district.spec.js](./district.spec.js) (also reads `build/*.html`), [external.spec.js](./external.spec.js), [image.spec.js](./image.spec.js), [share.spec.js](./share.spec.js), [signup.spec.js](./signup.spec.js).
 
 ## Invariants
 - [script.js:installScript](./script.js) only intercepts `http://localhost:5301/exec`; every test gets a freshly seeded sheet (`Esdeveniments`, empty `Inscripcions`, `Config!B1` = `SI`/`NO` per `closed`) and responses carry `access-control-allow-origin: *`.

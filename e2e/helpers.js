@@ -7,23 +7,27 @@ export const TODAY = '2026-11-10T09:00:00+01:00';
  * Opens the agenda with a freshly seeded sheet and a fixed clock, and waits for the cards.
  * `offline` visits once to store the offline copy and then makes the script unreachable.
  * `prepare` runs before the first visit, to change the seeded sheet for one test.
+ * `path` is the page to open (`./eixample` for a district); `waitForCards: false` does not wait for the first card.
  * @param {import('@playwright/test').Page} page
  * @param {{
- *   today?: string, query?: string, offline?: boolean, options?: import('./script.js').ScriptOptions,
+ *   today?: string, path?: string, waitForCards?: boolean, query?: string, offline?: boolean, options?: import('./script.js').ScriptOptions,
  *   prepare?: (handle: Awaited<ReturnType<typeof installScript>>) => void
  * }} [config]
  */
-export async function openAgenda(page, { today = TODAY, query = '', offline = false, options = {}, prepare } = {}) {
+export async function openAgenda(
+	page,
+	{ today = TODAY, path = './', waitForCards = true, query = '', offline = false, options = {}, prepare } = {}
+) {
 	const handle = await installScript(page, options);
 	prepare?.(handle);
 	await page.clock.setFixedTime(today);
 	if (offline) {
-		await page.goto('./');
-		await cards(page).first().waitFor();
+		await page.goto(path);
+		if (waitForCards) await cards(page).first().waitFor();
 		options.down = true;
 	}
-	await page.goto(query ? `./?${query}` : './');
-	await cards(page).first().waitFor();
+	await page.goto(query ? `${path}?${query}` : path);
+	if (waitForCards) await cards(page).first().waitFor();
 	return { ...handle, options };
 }
 

@@ -23,6 +23,13 @@ const eventRow = (id, extra = {}) => {
 	return EVENT_HEADER_OPTIONAL.map((key) => row[key]);
 };
 
+// Esdeveniments eixample: two events, with the prefix of the district.
+const seedEixample = () => [
+	EVENT_HEADER_OPTIONAL,
+	eventRow('eix-paradeta', { nom: 'Paradeta de l’Eixample', lloc: 'Mercat de la Concepció' }),
+	eventRow('eix-xerrada', { tipus: 'Acte', data: '2026-11-20', nom: 'Xerrada a l’Eixample', lloc: 'Centre Cívic Fort Pienc' })
+];
+
 // With "today" fixed at 10 November: two open events, a cancelled one, a past one,
 // one with a manager and one that signs up on an external web.
 const seedEvents = () => [
@@ -52,7 +59,8 @@ const seedEvents = () => [
  *   busy?: boolean,
  *   down?: boolean,
  *   loseAnswer?: boolean,
- *   features?: string[]
+ *   features?: string[],
+ *   noDistrict?: boolean
  * }} ScriptOptions
  */
 
@@ -63,7 +71,11 @@ const seedEvents = () => [
  * @param {ScriptOptions} [options]
  */
 export async function installScript(page, options = {}) {
-	const script = createScript({ events: seedEvents(), signups: [SIGNUP_HEADER] });
+	const script = createScript({
+		events: seedEvents(),
+		signups: [SIGNUP_HEADER],
+		extraSheets: { 'Esdeveniments eixample': seedEixample() }
+	});
 
 	/** @param {import('@playwright/test').Route} route @param {unknown} body */
 	const answer = (route, body) =>
@@ -85,6 +97,8 @@ export async function installScript(page, options = {}) {
 		setClosed(script, options.closed);
 		const result = script.get(Object.fromEntries(new URL(request.url()).searchParams));
 		if (options.features) result.features = options.features;
+		// An older script ignores `d` and does not know `district`.
+		if (options.noDistrict) delete result.district;
 		return answer(route, result);
 	});
 
