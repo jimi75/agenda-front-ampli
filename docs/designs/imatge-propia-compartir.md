@@ -6,10 +6,39 @@
 
 ## Overview
 
-Add a secondary “Comparteix amb imatge pròpia” action to the event detail.
-It lets a person select one image from their device and share the original
-file with the existing event message. Keep “Comparteix” and its generated
-poster workflow unchanged.
+Add a secondary own-image action to the event detail. Its button reads “Tria
+una imatge pròpia per compartir”. It lets a person select one image from their
+device; the same button then reads “Comparteix amb la imatge pròpia”, and that
+deliberate tap shares the original file with the existing event message. Keep
+“Comparteix” and its generated poster workflow unchanged.
+
+### Amendment (2026-11-13): deliberate two-step flow
+
+The first implementation called `navigator.share` as soon as the picker
+returned a file. On the author's Android phone, that call did not open the
+system panel. Mobile browsers require transient user activation for
+`navigator.share`, and the time spent in the native picker consumes it. A
+recovery that offered “Torna a compartir” after an initial `AbortError` worked,
+but the author rejected it: it read as an error and could not distinguish a
+lost activation from a person closing the panel.
+
+The author approved a two-step flow, which supersedes earlier text in this
+document:
+
+1. “Tria una imatge pròpia per compartir” opens the picker. A valid selection
+   never calls `navigator.share`; it holds the original file, relabels the same
+   button “Comparteix amb la imatge pròpia”, announces “Imatge triada, a punt
+   per compartir”, and returns focus to the button.
+2. Tapping “Comparteix amb la imatge pròpia” calls `shareImage` synchronously
+   from that tap with the held file and current text.
+
+`AbortError` is now always a silent cancellation that releases the file.
+`NotAllowedError` keeps the same file ready under the same label for one more
+tap, sent with `{ second: true }`; that attempt cannot loop. “Torna a
+compartir” and `T.share.customRetry` no longer exist. The two taps are
+inherent to web pages that pick and then share a file, so they are expected on
+every phone. Real-device behavior beyond the author's Android check remains
+unverified.
 
 ## The Problem
 
@@ -27,11 +56,12 @@ a separate action rather than changing the default.
 * Use no application server upload or persistent image storage.
 * On failure, show only “No s’ha pogut compartir la imatge” inline. Do not
   download an image, open WhatsApp, or automatically invoke normal sharing.
-* Treat picker cancellation as cancellation, without a failure message. If the
-  first native share call aborts after returning from the picker, offer one
-  deliberate retry rather than leaving no visible recovery action.
-* If another deliberate tap is needed, offer “Torna a compartir” with the same
-  temporarily held file. A failed second attempt must not create a retry loop.
+* Treat picker and system-panel cancellation as cancellation, without a
+  failure message.
+* Choosing a file only prepares it; the share call runs from a separate,
+  deliberate tap on “Comparteix amb la imatge pròpia”. If the browser still
+  asks for another tap, keep the same file ready for one more attempt. A
+  failed second attempt must not create a retry loop.
 * Clear temporary file references when closing or switching events, or when
   the custom sharing attempt reaches a terminal outcome.
 
@@ -59,25 +89,25 @@ a separate action rather than changing the default.
 ### CUJ 1: Share the selected original image
 
 * **Given:** An event that offers normal sharing.
-* **When:** The person activates the secondary action and selects an image.
-* **Then:** The browser receives that original file and the event's current
-  share text. No poster is rendered, no file is downloaded, and nothing is
-  uploaded to an application service.
+* **When:** The person activates “Tria una imatge pròpia per compartir”,
+  selects an image, and then activates “Comparteix amb la imatge pròpia”.
+* **Then:** Selecting alone shares nothing. The second tap gives the browser
+  that original file and the event's current share text. No poster is
+  rendered, no file is downloaded, and nothing is uploaded to an application
+  service.
 
 ### CUJ 2: Cancel
 
 * **Given:** The picker or system share panel is open.
-* **When:** The person cancels the picker or the second system-share attempt.
-* **Then:** No replacement action runs, no error is displayed, and normal
-  sharing remains available. An `AbortError` from the first share attempt
-  instead retains the file and offers “Torna a compartir”; native platforms
-  may abort this picker-to-share handoff before showing a share panel.
+* **When:** The person cancels either one.
+* **Then:** No replacement action runs, no error is displayed, any held file
+  is released, and normal sharing remains available.
 
 ### CUJ 3: Retry with a deliberate tap
 
-* **Given:** The first share attempt reports that another tap may be needed or
-  aborts while returning from the native picker.
-* **When:** The person activates “Torna a compartir”.
+* **Given:** The share tap reports that another tap may be needed
+  (`NotAllowedError`).
+* **When:** The person activates “Comparteix amb la imatge pròpia” again.
 * **Then:** The same file is shared without reopening the picker. A failed
   second attempt shows the brief error and releases the retained file.
 
@@ -134,15 +164,15 @@ treatment, while retaining a minimum 44 px tap target, existing focus styling,
 and a readable label. Do not reduce contrast or opacity to indicate hierarchy.
 Keep the existing primary and download action styles unchanged.
 
-Use “Comparteix amb imatge pròpia” normally and “Torna a compartir” when an
-activation retry is ready. Both are real buttons operable by keyboard. Use a
-hidden single-file input with
+Use “Tria una imatge pròpia per compartir” normally and “Comparteix amb la
+imatge pròpia” while a chosen file waits for its share tap. Both are the same
+real button, operable by keyboard. Use a hidden single-file input with
 `accept="image/*,.jpg,.jpeg,.png,.gif,.webp"` and no `multiple` or `capture`
 attribute. The explicit extensions support the missing-type fallback below;
 they do not broaden acceptance of files with a reported non-image type.
 The visible button opens it synchronously from its click handler;
-the input itself is not a second focus stop. Do not introduce a preview or
-confirmation step.
+the input itself is not a second focus stop. Do not introduce a preview; the
+relabelled button is the only confirmation step.
 
 Show this control only for share-eligible events. The component's existing
 `canShare` value means event eligibility: open, closed-registration, or
@@ -203,15 +233,16 @@ Implementation, step 3.
 
 | Outcome | Custom behavior |
 |---|---|
+| Valid selection | Hold the original file, show “Comparteix amb la imatge pròpia”, announce “Imatge triada, a punt per compartir”, and focus the button. Do not call `shareImage`. |
 | `shared` | Return to idle; clear file and input references. Do not claim the destination published a post. |
-| `aborted` on first attempt | Hold the original file and show “Torna a compartir”; picker-to-share activation can be lost when a native mobile picker returns. |
-| `aborted` on second attempt | Return to idle silently and release references. |
-| `needs-second-tap` on first attempt | Hold the original file in memory and show “Torna a compartir”. Announce that the image is ready. |
+| `aborted` | Return to idle silently and release references. |
+| `needs-second-tap` on first attempt | Keep the same file ready under the same label; the next tap uses `{ second: true }`. |
 | `unsupported` or `error` | Release references and show only the agreed inline error. |
 | Any failed second attempt | Show the error and release the file; never return to ready. |
 
-For the second tap, invoke `shareImage` with the same `File`, the current
-event text, and `{ second: true }`, with no preceding asynchronous work.
+For the share tap, invoke `shareImage` with the held `File` and the current
+event text (adding `{ second: true }` after `needs-second-tap`), with no
+preceding asynchronous work.
 Remove the ready-state reference when the call starts; the pending operation
 holds the file only until it settles. If the person instead uses normal
 sharing or download, release the custom ready file and follow that action.
@@ -225,17 +256,18 @@ step 1, specifies the separate error boundaries and complete mapping.
 
 Extend the existing single `.live[aria-live="polite"]` region. A custom error
 has priority while custom state is failed. A custom ready state announces
-“Imatge preparada: prem de nou” and labels the secondary button “Torna a
-compartir”. Otherwise retain the current primary message selection. Starting
+“Imatge triada, a punt per compartir” and labels the secondary button
+“Comparteix amb la imatge pròpia”. Otherwise retain the current primary
+message selection. Starting
 an existing action clears the custom status so its own errors are not masked.
 Cancelling the picker leaves pre-existing primary messages untouched; after an
 accepted selection, the older primary statuses have already been cleared.
 
-Centralize the three new strings in `T.share`: `customImage`, `customRetry`,
-and `customFailed`. Reuse `T.share.ready` for the ready announcement. Keep
+Centralize the new strings in `T.share`: `customImage`, `customShare`,
+`customChosen`, and `customFailed`. Keep
 focus on or restore it to the originating custom button after picker
-cancellation when the same detail is still open; do not steal focus on a late
-result or after the detail closes.
+cancellation or a valid selection when the same detail is still open; do not
+steal focus on a late result or after the detail closes.
 
 ### Interfaces that do not change
 
@@ -383,11 +415,11 @@ synchronous invocation and existing share-exception/second-attempt assertions.
 
 **Modify
 [src/lib/texts.js](../../src/lib/texts.js).**
-Add `T.share.customImage` = “Comparteix amb imatge pròpia”,
-`T.share.customRetry` = “Torna a compartir”, and `T.share.customFailed` =
-“No s’ha pogut compartir la imatge”. Keep all existing strings unchanged.
-Use `T.share.ready` for the live retry announcement rather than introducing
-duplicate wording.
+Add `T.share.customImage` = “Tria una imatge pròpia per compartir”,
+`T.share.customShare` = “Comparteix amb la imatge pròpia”,
+`T.share.customChosen` = “Imatge triada, a punt per compartir”, and
+`T.share.customFailed` = “No s’ha pogut compartir la imatge”. Keep all
+existing strings unchanged.
 
 ### 3. Wire the event-detail interaction
 
@@ -413,8 +445,8 @@ Use these state and ownership rules within the existing component:
   including close, reopening, or an event-ID change. A change to the same
   event's eligibility does not itself advance the epoch. Advance the custom
   token for a fresh/replacement picker, retry, existing image action,
-  eligibility loss, and full reset. The first selection-to-share remains
-  part of its picker operation.
+  eligibility loss, and full reset. A selection moves its picker operation to
+  `ready` under the same token; the share tap advances it.
 
 Implement the following transitions:
 
@@ -443,23 +475,22 @@ Implement the following transitions:
    An invalid file produces the custom error and releases its references
    without sharing or changing the primary prepared/fallback state.
 5. A valid selection clears primary `readyFile`, `shareView`, and
-   `imageFailed`, sets custom state to idle, installs a new custom-flight
-   identity, and sets `sharing = true` before calling `shareImage` immediately
-   with the original file and current text. There is no asynchronous work
-   before the call. Guard handlers as well as disabled attributes so multiple
-   same-task events cannot send twice.
+   `imageFailed`, holds the original file with `second: false`, sets custom
+   state to `ready`, and focuses the custom button. It never calls
+   `shareImage`: the picker has consumed the opening tap's activation.
 6. On settlement, first release `sharing` and clear the custom-flight identity
    only if its captured epoch remains current and the identity still equals
    the active custom flight. Then apply the architecture outcome table only
    if the custom token also matches and the detail is open and eligible.
    Cleanup ownership is independent of permission to display the result.
-7. Retain a file after first-attempt `needs-second-tap` or `aborted`. In `ready`, the
-   custom button checks the same eligibility/busy guards, advances its token,
-   captures the same retained file, clears the ready reference, installs its
-   flight identity, and sets `sharing` before calling `shareImage` with current
-   text and `{ second: true }`. No picker or asynchronous preparation runs.
-   Settlement follows transition 6. A failed second attempt shows the error
-   without returning to ready; abort remains silent.
+7. In `ready`, the custom button checks the same eligibility/busy guards,
+   advances its token, captures the held file, clears the ready reference,
+   installs its flight identity, and sets `sharing` before calling
+   `shareImage` with current text, adding `{ second: true }` only when the
+   file is held after `needs-second-tap`. No picker or asynchronous
+   preparation runs. Guard handlers as well as disabled attributes so
+   multiple same-task events cannot send twice. Settlement follows
+   transition 6; only a first-attempt `needs-second-tap` returns to ready.
 8. Starting `share` or `download` after its existing busy guard advances the
    custom token, removes its picker, releases its ready file, and clears custom
    status before following the existing path. Do not alter the primary
@@ -517,12 +548,14 @@ Cover each of these cases once, grouped by the behavior under test:
 * The custom action is secondary, keyboard reachable, and opens an image-only
   single-file picker. Assert input attributes and that the default share
   button does not open it.
-* JPEG and PNG selection sends one original file plus the full existing event
-  message. Repeat with an external-registration event and its external URL.
+* Choosing a valid file does not call `navigator.share`; it relabels the
+  button, announces the chosen image, and focuses the button. Only the next
+  tap sends one original file plus the full existing event message, for JPEG
+  and PNG. Repeat with an external-registration event and its external URL.
 * No poster mounts, download events, new WhatsApp link, or application upload
   occurs along the custom path. Track outgoing requests after agenda setup
   so unrelated initial data/font requests do not create false positives.
-* Choosing normal sharing or download while a custom retry is ready discards
+* Choosing normal sharing or download while a chosen file is ready discards
   it and follows the original poster path. Custom failure must not mask a
   later primary error or fallback message.
 
@@ -531,10 +564,9 @@ Cover each of these cases once, grouped by the behavior under test:
 * Picker cancel and empty selection do not share, download, or show an error.
   Cancelling a picker opened while a generated poster is ready preserves
   that existing primary retry.
-* Picker cancellation and a cancelled second share attempt are silent. An
-  `AbortError` on the first attempt offers the same one-tap recovery as
-  `NotAllowedError`, because native picker return can abort before a share
-  panel is shown.
+* Cancelling the system panel (`AbortError`) is silent, releases the file,
+  and returns the button to “Tria una imatge pròpia per compartir”.
+* A chosen file is discarded on close/reopen and on loss of eligibility.
 * Omit both picker cancellation events, then deliberately activate custom
   sharing again and select successfully. A late event from the previous
   input cannot send or reset the replacement.
@@ -639,12 +671,15 @@ Record actual device, OS, browser and destination versions, date, and per-case
 pass/fail/not observed:
 
 * Default generated sharing and download still behave as documented.
-* Choosing an original photo sends its image and the expected message where
-  the receiving app supports both; note any omission by that app.
+* Choosing an original photo relabels the button without opening the panel;
+  tapping “Comparteix amb la imatge pròpia” sends its image and the expected
+  message where the receiving app supports both; note any omission by that
+  app.
 * Picker cancellation leaves the page usable and the custom button available.
 * The same image can be selected again.
-* A blocked initial share can be retried with the deliberate tap where that
-  browser exhibits the condition; do not report an unobserved retry as tested.
+* A `NotAllowedError` on the share tap can be retried with one more tap where
+  that browser exhibits the condition; do not report an unobserved retry as
+  tested.
 * Cancelling the system panel causes no substitute action.
 * Unsupported files show the brief error, followed by a working normal share.
 * Long button text wraps at mobile widths without horizontal overflow or

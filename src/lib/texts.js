@@ -59,8 +59,9 @@ export const T = {
 	share: {
 		download: 'Descarrega la imatge',
 		share: 'Comparteix',
-		customImage: 'Comparteix amb imatge pròpia',
-		customRetry: 'Torna a compartir',
+		customImage: 'Tria una imatge pròpia per compartir',
+		customShare: 'Comparteix amb la imatge pròpia',
+		customChosen: 'Imatge triada, a punt per compartir',
 		customFailed: 'No s’ha pogut compartir la imatge',
 		generating: 'Generant…',
 		ready: 'Imatge preparada: prem de nou',

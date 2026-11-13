@@ -52,6 +52,7 @@ async function openDetail(page, { behaviour = ['ok'], files = true, pending = []
 		share: detail.getByRole('button', { name: T.share.share, exact: true }),
 		ready: detail.getByRole('button', { name: T.share.ready }),
 		custom: detail.getByRole('button', { name: T.share.customImage, exact: true }),
+		customShare: detail.getByRole('button', { name: T.share.customShare, exact: true }),
 		waLink: detail.getByRole('link', { name: new RegExp(T.share.waLink) }),
 		live: detail.locator('.live')
 	};
@@ -70,6 +71,16 @@ async function selectFile(page, button, file) {
 	await button.click();
 	const chooser = await chooserPromise;
 	await chooser.setFiles(file);
+}
+
+/**
+ * Chooses an image and then taps «Comparteix amb la imatge pròpia», the tap that shares it.
+ * @param {import('@playwright/test').Page} page @param {import('@playwright/test').Locator} button
+ * @param {{ name: string, mimeType: string, buffer: Buffer }} file
+ */
+async function shareOwnImage(page, button, file) {
+	await selectFile(page, button, file);
+	await detailDialog(page).getByRole('button', { name: T.share.customShare, exact: true }).click();
 }
 
 /**
@@ -288,7 +299,7 @@ test('la imatge preparada es descarta en tancar el detall', async ({ page }) => 
 test('la nova acció és secundària, accessible amb teclat i obre un selector d’una sola imatge', async ({
 	page
 }) => {
-	const { share, custom } = await openDetail(page);
+	const { share, custom, customShare, live } = await openDetail(page);
 	await share.click();
 	await sharedTimes(page, 1);
 	await expect(page.locator('.custom-file-input')).toHaveCount(0);
@@ -322,7 +333,13 @@ test('la nova acció és secundària, accessible amb teclat i obre un selector d
 		mimeType: 'image/png',
 		buffer: Buffer.from([1, 2, 3])
 	});
+	await expect(customShare).toBeFocused();
+	await expect(live).toHaveText(T.share.customChosen);
+	expect(await shareCalls(page)).toHaveLength(1);
+	await page.keyboard.press('Enter');
 	await sharedTimes(page, 2);
+	await expect(custom).toBeVisible();
+	await expect(live).toHaveText('');
 });
 
 for (const file of [
@@ -330,7 +347,7 @@ for (const file of [
 	{ name: 'untouched-image.png', mimeType: 'image/png', bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 2]) }
 ]) {
 	test(`imatge pròpia: envia ${file.name} sense processar-la ni fer peticions d’aplicació`, async ({ page }) => {
-		const { custom, downloads, waLink } = await openDetail(page);
+		const { custom, customShare, downloads, waLink } = await openDetail(page);
 		/** @type {string[]} */
 		const appRequests = [];
 		page.on('request', (request) => {
@@ -338,6 +355,9 @@ for (const file of [
 		});
 
 		await selectFile(page, custom, { name: file.name, mimeType: file.mimeType, buffer: file.bytes });
+		await expect(customShare).toBeVisible();
+		expect(await shareCalls(page)).toHaveLength(0);
+		await customShare.click();
 		await sharedTimes(page, 1);
 		const [call] = await shareCalls(page);
 		expect(call).toEqual({
@@ -365,7 +385,7 @@ test('imatge pròpia en una inscripció externa: conserva el text i l’URL exte
 		'📢 *Jornada amb inscripció externa* 📢\n\n🗓️ Dijous 19 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: ' +
 		externalUrl;
 	const { custom, downloads, waLink } = await openDetail(page, { query: 'e=ext-1' });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'external.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([9, 8, 7])
@@ -383,19 +403,17 @@ for (const primaryAction of ['share', 'download']) {
 	test(`usar «${primaryAction === 'share' ? 'Comparteix' : 'Descarrega la imatge'}» descarta la preparació pròpia`, async ({
 		page
 	}) => {
-		const { detail, custom, share, downloads } = await openDetail(page, {
-			behaviour: primaryAction === 'share' ? ['NotAllowedError', 'ok'] : ['NotAllowedError']
-		});
+		const { detail, custom, customShare, share, downloads } = await openDetail(page);
 		await selectFile(page, custom, {
 			name: 'selected.png',
 			mimeType: 'image/png',
 			buffer: Buffer.from([1, 2])
 		});
-		await expect(detail.getByRole('button', { name: T.share.customRetry })).toBeVisible();
+		await expect(customShare).toBeVisible();
 
 		if (primaryAction === 'share') {
 			await share.click();
-			await sharedTimes(page, 2);
+			await sharedTimes(page, 1);
 		} else {
 			const [download] = await Promise.all([
 				page.waitForEvent('download'),
@@ -404,6 +422,10 @@ for (const primaryAction of ['share', 'download']) {
 			expect(download.suggestedFilename()).toBe(`agenda-${ID}.png`);
 		}
 		await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
+		await expect(customShare).toHaveCount(0);
+		expect((await shareCalls(page)).map((call) => call.files[0].name)).toEqual(
+			primaryAction === 'share' ? [`agenda-${ID}.png`] : []
+		);
 		expect(await postersRendered(page)).toBe(1);
 		expect(downloads).toEqual(primaryAction === 'download' ? [`agenda-${ID}.png`] : []);
 	});
@@ -411,7 +433,7 @@ for (const primaryAction of ['share', 'download']) {
 
 test('un error propi no emmascara l’error i el respatller posterior de l’acció principal', async ({ page }) => {
 	const { custom, share, live, waLink } = await openDetail(page, { behaviour: ['DataError', 'DataError'] });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'selected.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
@@ -434,7 +456,7 @@ test('cancel·lar el selector és silenciós i manté disponible l’acció prò
 	await expect(live).toHaveText('');
 	expect(await shareCalls(page)).toHaveLength(0);
 	expect(downloads).toEqual([]);
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'same-after-picker-cancel.jpg',
 		mimeType: 'image/jpeg',
 		buffer: Buffer.from([1, 2])
@@ -500,28 +522,43 @@ test('si no es pot obrir el selector, mostra només l’error propi', async ({ p
 	await expect(waLink).toHaveCount(0);
 });
 
-test('AbortError del primer intento prepara un toque explícito; cancelar el segundo es silencioso', async ({ page }) => {
-	const { custom, live } = await openDetail(page, { behaviour: ['AbortError', 'AbortError'] });
-	await selectFile(page, custom, {
+test('cancel·lar el panel del sistema és silenciós, allibera la imatge i no reintenta', async ({ page }) => {
+	const { custom, customShare, live, downloads, waLink } = await openDetail(page, { behaviour: ['AbortError'] });
+	await shareOwnImage(page, custom, {
 		name: 'cancelled.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
 	});
 	await sharedTimes(page, 1);
-	const retry = page.getByRole('button', { name: T.share.customRetry, exact: true });
-	await expect(retry).toHaveText(T.share.customRetry);
-	await expect(live).toHaveText(T.share.ready);
-	await retry.click();
-	await sharedTimes(page, 2);
-	await expect(page.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
+	await expect(custom).toBeEnabled();
+	await expect(customShare).toHaveCount(0);
 	await expect(live).toHaveText('');
-	expect(await sameShareFile(page)).toBe(true);
+	expect(downloads).toEqual([]);
+	await expect(waLink).toHaveCount(0);
+	expect(await postersRendered(page)).toBe(0);
+});
+
+test('triar una imatge no la comparteix fins al toc de «Comparteix amb la imatge pròpia»', async ({ page }) => {
+	const { custom, customShare, live } = await openDetail(page);
+	await selectFile(page, custom, {
+		name: 'waiting.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from([4, 5])
+	});
+	await expect(customShare).toBeVisible();
+	await expect(customShare).toBeEnabled();
+	await expect(live).toHaveText(T.share.customChosen);
+	expect(await shareCalls(page)).toHaveLength(0);
+	expect(await page.locator('.custom-file-input').count()).toBe(0);
+	await customShare.click();
+	await sharedTimes(page, 1);
+	expect(await capturedCustomFile(page)).toMatchObject({ name: 'waiting.png', isShareFile: true });
 });
 
 test('un nou toc substitueix un selector sense cancel: els esdeveniments tardans del vell no afecten el nou', async ({
 	page
 }) => {
-	const { custom, live } = await openDetail(page);
+	const { custom, customShare, live } = await openDetail(page);
 	const firstChooser = page.waitForEvent('filechooser');
 	await custom.click();
 	await firstChooser;
@@ -534,7 +571,7 @@ test('un nou toc substitueix un selector sense cancel: els esdeveniments tardans
 		mimeType: 'image/png',
 		buffer: Buffer.from([3, 4])
 	});
-	await sharedTimes(page, 1);
+	await expect(customShare).toBeVisible();
 	await page.evaluate(() => {
 		const old = /** @type {HTMLInputElement} */ (/** @type {any} */ (window).__oldPicker);
 		const data = new DataTransfer();
@@ -543,36 +580,43 @@ test('un nou toc substitueix un selector sense cancel: els esdeveniments tardans
 		old.dispatchEvent(new Event('change', { bubbles: true }));
 		old.dispatchEvent(new Event('cancel'));
 	});
-	expect(await shareCalls(page)).toHaveLength(1);
+	await expect(customShare).toBeVisible();
+	await expect(live).toHaveText(T.share.customChosen);
+	expect(await shareCalls(page)).toHaveLength(0);
+	await customShare.click();
+	await sharedTimes(page, 1);
+	expect((await shareCalls(page))[0].files[0].name).toBe('replacement.png');
 	await expect(custom).toHaveText(T.share.customImage);
 	await expect(live).toHaveText('');
 });
 
-for (const firstOutcome of ['success', 'failure']) {
+for (const firstOutcome of ['success', 'failure', 'cancel']) {
 	test(`es pot tornar a triar el mateix nom després de ${firstOutcome}`, async ({ page }) => {
-		const behaviour = firstOutcome === 'failure' ? ['DataError', 'ok'] : ['ok', 'ok'];
+		const behaviour =
+			firstOutcome === 'failure' ? ['DataError', 'ok'] : firstOutcome === 'cancel' ? ['AbortError', 'ok'] : ['ok', 'ok'];
 		const { custom } = await openDetail(page, { behaviour });
 		const payload = {
 			name: 'same-local-name.jpg',
 			mimeType: 'image/jpeg',
 			buffer: Buffer.from([1, 2, 3])
 		};
-		await selectFile(page, custom, payload);
+		await shareOwnImage(page, custom, payload);
 		await sharedTimes(page, 1);
 		if (firstOutcome === 'failure') {
 			await expect(page.locator('.live')).toHaveText(T.share.customFailed);
 		}
-		await selectFile(page, custom, payload);
+		await shareOwnImage(page, custom, payload);
 		await sharedTimes(page, 2);
 		expect((await shareCalls(page)).at(-1)?.files[0].name).toBe(payload.name);
 	});
 }
 
 test('els tipus buits només passen amb les cinc extensions acordades, sense afegir-ne cap', async ({ page }) => {
-	const { custom } = await openDetail(page);
+	const { custom, customShare } = await openDetail(page);
 	const accepted = ['photo.jpg', 'photo.jpeg', 'photo.png', 'photo.gif', 'photo.webp', 'photo.JPG'];
 	for (const name of accepted) {
 		await selectConstructedFile(page, custom, { name, type: '', bytes: [1, 2] });
+		await customShare.click();
 		await sharedTimes(page, accepted.indexOf(name) + 1);
 		const call = (await shareCalls(page)).at(-1);
 		expect(call?.files).toEqual([{ name, type: '', size: 2 }]);
@@ -580,7 +624,7 @@ test('els tipus buits només passen amb les cinc extensions acordades, sense afe
 });
 
 test('rebutja noms buits o enganyosos i tipus explícits no compatibles només amb l’avís breu', async ({ page }) => {
-	const { custom, live, downloads, waLink } = await openDetail(page);
+	const { custom, customShare, live, downloads, waLink } = await openDetail(page);
 	const rejected = [
 		{ name: 'no-extension', mimeType: '' },
 		{ name: 'photo.heic', mimeType: '' },
@@ -596,6 +640,7 @@ test('rebutja noms buits o enganyosos i tipus explícits no compatibles només a
 			bytes: [7]
 		});
 		await expect(live, `${file.name} (${file.mimeType})`).toHaveText(T.share.customFailed);
+		await expect(customShare).toHaveCount(0);
 	}
 	expect(await shareCalls(page)).toHaveLength(0);
 	expect(await postersRendered(page)).toBe(0);
@@ -604,12 +649,13 @@ test('rebutja noms buits o enganyosos i tipus explícits no compatibles només a
 });
 
 test('un tipus buit acceptat pel nom però rebutjat per canShare mostra l’error sense substitució', async ({ page }) => {
-	const { custom, live, downloads, waLink } = await openDetail(page, { files: false });
+	const { custom, customShare, live, downloads, waLink } = await openDetail(page, { files: false });
 	await selectConstructedFile(page, custom, {
 		name: 'original.JPG',
 		type: '',
 		bytes: [0, 1, 2]
 	});
+	await customShare.click();
 	await expect(live).toHaveText(T.share.customFailed);
 	expect(await capturedCustomFile(page)).toMatchObject({
 		name: 'original.JPG',
@@ -625,7 +671,7 @@ test('un tipus buit acceptat pel nom però rebutjat per canShare mostra l’erro
 
 for (const capability of ['missing-share', 'missing-can-share', 'throwing-probe', 'unsupported']) {
 	test(`${capability}: falla només amb l’avís propi, sense camins de respatller`, async ({ page }) => {
-		const { custom, live, downloads, waLink } = await openDetail(page, {
+		const { custom, customShare, live, downloads, waLink } = await openDetail(page, {
 			files: capability !== 'unsupported'
 		});
 		const chooserPromise = page.waitForEvent('filechooser');
@@ -653,6 +699,7 @@ for (const capability of ['missing-share', 'missing-can-share', 'throwing-probe'
 			input.files = data.files;
 			input.dispatchEvent(new Event('change', { bubbles: true }));
 		});
+		await customShare.click();
 		await expect(live).toHaveText(T.share.customFailed);
 		expect(await shareCalls(page)).toHaveLength(0);
 		expect(await postersRendered(page)).toBe(0);
@@ -663,7 +710,7 @@ for (const capability of ['missing-share', 'missing-can-share', 'throwing-probe'
 
 test('DataError de share propi només mostra l’error, sense generar ni descarregar cap imatge', async ({ page }) => {
 	const { custom, live, downloads, waLink } = await openDetail(page, { behaviour: ['DataError'] });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'original.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
@@ -676,18 +723,19 @@ test('DataError de share propi només mostra l’error, sense generar ni descarr
 });
 
 test('NotAllowedError propi ofereix un sol segon toc amb el mateix File original', async ({ page }) => {
-	const { custom, live } = await openDetail(page, { behaviour: ['NotAllowedError', 'ok'] });
+	const { custom, customShare, live } = await openDetail(page, { behaviour: ['NotAllowedError', 'ok'] });
 	let pickerCount = 0;
 	page.on('filechooser', () => pickerCount++);
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'retry-original.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([5, 6, 7])
 	});
-	await expect(page.getByRole('button', { name: T.share.customRetry })).toBeVisible();
-	await expect(live).toHaveText(T.share.ready);
+	await sharedTimes(page, 1);
+	await expect(customShare).toBeVisible();
+	await expect(live).toHaveText(T.share.customChosen);
 	expect(await page.locator('.custom-file-input').count()).toBe(0);
-	await page.getByRole('button', { name: T.share.customRetry }).click();
+	await customShare.click();
 	await sharedTimes(page, 2);
 	expect(pickerCount).toBe(1);
 	expect(await sameShareFile(page)).toBe(true);
@@ -699,26 +747,26 @@ test('NotAllowedError propi ofereix un sol segon toc amb el mateix File original
 test('dos NotAllowedError propisos: el segon falla, allibera el File i no ofereix un tercer intent', async ({
 	page
 }) => {
-	const { custom, live } = await openDetail(page, {
+	const { custom, customShare, live } = await openDetail(page, {
 		behaviour: ['NotAllowedError', 'NotAllowedError']
 	});
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'one-retry.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
 	});
-	await expect(page.getByRole('button', { name: T.share.customRetry })).toBeVisible();
-	await page.getByRole('button', { name: T.share.customRetry }).click();
+	await sharedTimes(page, 1);
+	await customShare.click();
 	await sharedTimes(page, 2);
 	await expect(live).toHaveText(T.share.customFailed);
 	await expect(custom).toHaveText(T.share.customImage);
-	await expect(page.getByRole('button', { name: T.share.customRetry })).toHaveCount(0);
+	await expect(customShare).toHaveCount(0);
 	expect(await sameShareFile(page)).toBe(true);
 });
 
 test('les tres accions d’imatge es desactiven mentre el compartir propi està pendent', async ({ page }) => {
 	const { detail, custom, downloads, share } = await openDetail(page, { pending: [0] });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'pending.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
@@ -739,26 +787,27 @@ test('les tres accions d’imatge es desactiven mentre el compartir propi està 
 });
 
 test('una preparació pròpia no sobreviu a tancar i reobrir el detall', async ({ page }) => {
-	const { detail, custom } = await openDetail(page, { behaviour: ['NotAllowedError', 'ok'] });
+	const { detail, custom, customShare } = await openDetail(page);
 	await selectFile(page, custom, {
 		name: 'ready-before-close.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
 	});
-	await expect(page.getByRole('button', { name: T.share.customRetry })).toBeVisible();
+	await expect(customShare).toBeVisible();
 	await detail.getByRole('button', { name: T.detail.close }).click();
 	await expect(detail).toBeHidden();
 	await card(page, ID).getByRole('link', { name: /^Veure el detall de/ }).click();
 	await expect(detail).toBeVisible();
 	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
-	await expect(detail.getByRole('button', { name: T.share.customRetry })).toHaveCount(0);
+	await expect(customShare).toHaveCount(0);
+	expect(await shareCalls(page)).toHaveLength(0);
 });
 
 test('una resposta tardana d’un detall anterior no allibera el nou share ni en canvia els missatges', async ({
 	page
 }) => {
 	const { detail, custom } = await openDetail(page, { pending: [0, 1] });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'old-event.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
@@ -768,7 +817,7 @@ test('una resposta tardana d’un detall anterior no allibera el nou share ni en
 	await card(page, 'acte-1').getByRole('link', { name: /^Veure el detall de/ }).click();
 	const newDetail = detailDialog(page);
 	const newCustom = newDetail.getByRole('button', { name: T.share.customImage, exact: true });
-	await selectFile(page, newCustom, {
+	await shareOwnImage(page, newCustom, {
 		name: 'new-event.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([2])
@@ -829,11 +878,34 @@ test('perdre elegibilitat invalida un picker pendent i no comparteix una selecci
 	expect(await shareCalls(page)).toHaveLength(0);
 });
 
+test('perdre elegibilitat descarta una imatge triada encara no compartida', async ({ page }) => {
+	const { detail, custom, customShare, script } = await openDetail(page);
+	await selectFile(page, custom, {
+		name: 'chosen-before-ineligible.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from([1])
+	});
+	await expect(customShare).toBeVisible();
+	const eventRow = script.sheets.get('Esdeveniments').rows.find((row) => row[0] === ID);
+	if (!eventRow) throw new Error(`Missing event ${ID}`);
+	eventRow[1] = '2026-11-05';
+	await detail.getByRole('button', { name: T.participate }).click();
+	await expect(customShare).toHaveCount(0);
+
+	eventRow[1] = '2026-11-12';
+	await card(page, 'acte-1')
+		.getByRole('button', { name: T.participate })
+		.evaluate((button) => button.click());
+	await expect(custom).toBeVisible();
+	await expect(customShare).toHaveCount(0);
+	expect(await shareCalls(page)).toHaveLength(0);
+});
+
 test('perdre i recuperar elegibilitat no mostra un resultat tardà i manté el busy fins a settlement', async ({
 	page
 }) => {
 	const { detail, custom, script } = await openDetail(page, { pending: [0] });
-	await selectFile(page, custom, {
+	await shareOwnImage(page, custom, {
 		name: 'eligibility-pending.png',
 		mimeType: 'image/png',
 		buffer: Buffer.from([1])
@@ -855,5 +927,5 @@ test('perdre i recuperar elegibilitat no mostra un resultat tardà i manté el b
 	await settleShare(page, 0, 'NotAllowedError');
 	await expect(restoredCustom).toBeEnabled();
 	await expect(detail.locator('.live')).toHaveText('');
-	await expect(detail.getByRole('button', { name: T.share.customRetry })).toHaveCount(0);
+	await expect(detail.getByRole('button', { name: T.share.customShare, exact: true })).toHaveCount(0);
 });

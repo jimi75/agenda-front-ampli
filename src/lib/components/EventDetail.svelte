@@ -45,8 +45,12 @@
 	/** @typedef {{ epoch: number, token: number, input?: HTMLInputElement }} PickerDescriptor */
 	/** @typedef {{ epoch: number, token: number }} CustomFlight */
 	let customImageView = $state(/** @type {CustomImageView} */ ('idle'));
-	/** The original file is retained only while the custom retry is ready. @type {File | null} */
-	let customReadyFile = null;
+	/**
+	 * The chosen original file, kept only while «Comparteix amb la imatge pròpia» waits for its tap.
+	 * `second` marks the single deliberate retry after a `NotAllowedError`.
+	 * @type {{ file: File, second: boolean } | null}
+	 */
+	let customReady = null;
 	let customToken = 0;
 	/** @type {PickerDescriptor | null} */
 	let picker = $state.raw(null);
@@ -77,7 +81,7 @@
 		customToken++;
 		clearPicker();
 		customImageView = 'idle';
-		customReadyFile = null;
+		customReady = null;
 		customFlight = null;
 		readyFile = null;
 		shareView = 'idle';
@@ -117,7 +121,7 @@
 				customToken++;
 				clearPicker();
 				customImageView = 'idle';
-				customReadyFile = null;
+				customReady = null;
 			});
 		}
 		previouslyEligible = eligible;
@@ -175,7 +179,7 @@
 		customToken++;
 		clearPicker();
 		customImageView = 'idle';
-		customReadyFile = null;
+		customReady = null;
 	}
 
 	/** First tap: generates the image and shares it. */
@@ -239,22 +243,26 @@
 		);
 	}
 
+	/**
+	 * First tap opens the picker; choosing a file only prepares it. The next tap shares it, because
+	 * mobile browsers drop the tap's activation while their native picker is open.
+	 */
 	function customImage() {
 		if (!dialog?.open || !event || !canShare || generating || sharing) return;
 		if (customImageView === 'ready') {
-			const file = customReadyFile;
-			if (!file) return;
+			const ready = customReady;
+			if (!ready) return;
 			customToken++;
 			const token = customToken;
-			customReadyFile = null;
+			customReady = null;
 			customImageView = 'idle';
-			startCustomShare(file, token, true);
+			startCustomShare(ready.file, token, ready.second);
 			return;
 		}
 
 		customToken++;
 		const descriptor = /** @type {PickerDescriptor} */ ({ epoch, token: customToken });
-		customReadyFile = null;
+		customReady = null;
 		customImageView = 'picking';
 		try {
 			flushSync(() => {
@@ -304,7 +312,7 @@
 			return;
 		}
 		if (!isImageFile(file)) {
-			customReadyFile = null;
+			customReady = null;
 			customImageView = 'failed';
 			return;
 		}
@@ -312,13 +320,13 @@
 		readyFile = null;
 		shareView = 'idle';
 		imageFailed = false;
-		customReadyFile = null;
-		customImageView = 'idle';
-		startCustomShare(file, descriptor.token, false);
+		customReady = { file, second: false };
+		customImageView = 'ready';
+		customButton?.focus();
 	}
 
 	/**
-	 * Calls the system API immediately, retaining only this flight's cleanup identity.
+	 * Calls the system API immediately from the button tap, retaining only this flight's cleanup identity.
 	 * @param {File} file @param {number} token @param {boolean} second
 	 */
 	function startCustomShare(file, token, second) {
@@ -352,9 +360,9 @@
 			return;
 		}
 
-		customReadyFile = null;
-		if (!second && (outcome === 'needs-second-tap' || outcome === 'aborted')) {
-			customReadyFile = file;
+		customReady = null;
+		if (!second && outcome === 'needs-second-tap') {
+			customReady = { file, second: true };
 			customImageView = 'ready';
 		} else if (outcome === 'unsupported' || outcome === 'error') {
 			customImageView = 'failed';
@@ -460,7 +468,7 @@
 								disabled={busy}
 								onclick={customImage}
 							>
-								{customImageView === 'ready' ? T.share.customRetry : T.share.customImage}
+								{customImageView === 'ready' ? T.share.customShare : T.share.customImage}
 							</button>
 						</div>
 						{#if picker}
@@ -486,7 +494,9 @@
 						<p class="live" aria-live="polite">
 							{#if customImageView === 'failed'}
 								{T.share.customFailed}
-							{:else if customImageView === 'ready' || shareView === 'ready'}
+							{:else if customImageView === 'ready'}
+								<span class="sr-only">{T.share.customChosen}</span>
+							{:else if shareView === 'ready'}
 								<span class="sr-only">{T.share.ready}</span>
 							{:else if imageFailed || shareView === 'failed'}
 								{T.share.imageFailed}
