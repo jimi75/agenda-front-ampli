@@ -162,7 +162,7 @@ Si faltan J1 y K1, la agenda funciona igual y esos campos salen vacíos. Si los 
 - Si una fila está mal (id repetido, fecha fuera del 2 al 29 de noviembre, hora inválida), **se omite solo esa fila** y el resto sigue funcionando. Para ver cuáles, abre la web con `?admin` al final de la URL (`.../agenda-front-ampli/?admin`): sale la lista con el número de fila y el motivo. El panel también muestra las `features` que anuncia el script y cuántas inscripciones propias guarda ese navegador (`local signups`).
 - Hasta 3 eventos por día es lo previsto, pero si pones más se muestran todos y la casilla crece.
 - Los eventos de un día se ordenan por hora de inicio. **No hace falta ordenar la hoja**: la web ya ordena por fecha y hora. Si la quieres ordenar para verla mejor, usa **Datos → Ordenar hoja → por columna B (A→Z)** con la fila 1 fijada (`setup` la fija), y **nunca** selecciones las columnas incluyendo la cabecera para ordenarlas: la cabecera acabaría mezclada con los eventos.
-- **Las cabeceras de la fila 1 no se pueden cambiar ni mover** (`id`, `data`, `inici`, `tipus`, `nom` son obligatorias). `setup` las protege con un aviso: si intentas editar una, Google Sheets pregunta si de verdad quieres hacerlo (también protege las listas de fechas y horas de `Config!E:F`). Es un aviso y no un bloqueo, a propósito: tú eres el único editor, y un bloqueo "solo yo" no te frenaría. Para quitar o cambiar la protección: **Datos → Proteger hojas y rangos**. Si aun así falta alguna cabecera, la web muestra «L'agenda té un problema i ara no es pot mostrar»; abre `?admin` para ver cuál falta y qué filas se ignoran. Si te equivocas, **Archivo → Historial de versiones → Ver el historial de versiones** te deja restaurar la hoja a un momento anterior.
+- **Las cabeceras de la fila 1 no se pueden cambiar ni mover** (`id`, `data`, `inici`, `tipus`, `nom` son obligatorias). `setup` las protege con un aviso: si intentas editar una, Google Sheets pregunta si de verdad quieres hacerlo (también protege las listas de fechas y horas de `Config!E:F`). Es un aviso y no un bloqueo, a propósito. Ya no hay un solo editor (cada distrito tiene los suyos), pero cada pestaña de eventos solo la editan sus editores (ver *Distritos → Permisos y protecciones*), y un error se deshace con el historial de versiones. Para quitar o cambiar la protección: **Datos → Proteger hojas y rangos**. Si aun así falta alguna cabecera, la web muestra «L'agenda té un problema i ara no es pot mostrar»; abre `?admin` para ver cuál falta y qué filas se ignoran. Si te equivocas, **Archivo → Historial de versiones → Ver el historial de versiones** te deja restaurar la hoja a un momento anterior.
 - Hay una plantilla en [`docs/plantilla-esdeveniments.csv`](docs/plantilla-esdeveniments.csv).
 - Los cambios se ven al recargar la página. Quien ya la tiene abierta los verá al volver a ella pasados 2 minutos o al pulsar *Participar* (que recarga la agenda en silencio). Abrir el detalle no recarga.
 
@@ -172,11 +172,78 @@ Si faltan J1 y K1, la agenda funciona igual y esos campos salen vacíos. Si los 
 - **Baja (R4)**: quien se apuntó puede quitarse desde el mismo navegador. En un evento abierto, la tarjeta muestra **Desapuntar-me** en lugar de *Participar*, y pide un segundo toque («Segur? Prem de nou», 5 s) antes de enviar. Con varias inscripciones propias en el mismo evento, el botón abre el modal de *Participar*, que lista «La teva participació» con su nombre y **Desapuntar-me** cada una (mismo doble toque). La web guarda en `localStorage` el `request_id` de cada inscripción: es el único «permiso» para borrarla, y `request_id` no sale nunca en la lectura pública (`?action=agenda`). Por eso la baja solo se ofrece en el navegador donde se hizo la inscripción: si la persona cambia de móvil, limpia los datos del navegador o usa otro, no ve el botón y la quitas tú a mano. Tampoco se ofrece en eventos pasados, cancelados, con inscripciones cerradas (`Config!B1` = `NO`) ni con URL externa, ni en el detalle (donde *Participar* sigue disponible para apuntarse de nuevo o apuntar a otra persona).
 - **Pestaña `Baixes`** (se crea sola con la primera baja): antes de borrar la fila, el script copia `data_hora_baixa`, `event_id`, `nom` y `request_id` aquí. Es el archivo para deshacer una baja por error (copia la fila de vuelta a `Inscripcions`) o para ver quién se quitó. Nadie la lee ni la borra: contiene nombres, así que entra en la limpieza de *Cuando acabe noviembre*. El script busca la fila por `event_id` **y** `request_id` y la vuelve a comprobar justo antes de borrar: si mientras tanto reordenaste o editaste la hoja y esa fila ya no coincide, no borra nada y responde `removed:false`.
 - **Borrar o corregir un nombre a mano** (otro navegador, otro estado del evento, abuso): borra o edita la fila en la hoja. Lo que borras tú no se archiva en `Baixes`.
-- **Cerrar las inscripciones**: pestaña `Config`, celda **B1** → `NO`. Vuelve a `SI` para abrirlas. Con `NO` la web no ofrece la baja, pero el script la sigue aceptando con el `request_id` correcto.
+- **Cerrar las inscripciones**: pestaña `Config`, celda **B1** → `NO`. Cierra las inscripciones de **todos los distritos a la vez**. Vuelve a `SI` para abrirlas. Con `NO` la web no ofrece la baja, pero el script la sigue aceptando con el `request_id` correcto.
 - **Límites** (en `Code.gs`): 150 inscritos por evento y 3000 en total.
 - **Duplicados**: se permiten y se cuentan. Dos personas pueden llamarse igual, así que no se deduplica por nombre. Si la respuesta del servidor se pierde y la web reintenta, el `request_id` evita que se escriba dos veces.
 - **Quién lo ve**: la lista de apuntados es pública para cualquiera que tenga el enlace (y la URL del script es pública, porque va en el código de la web). Es una decisión aceptada. El modal pide escribir solo el nombre de pila o un apodo. Con un grupo de unas 100 personas, un nombre de pila junto con un lugar y una hora puede identificar a alguien.
-- **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` y borra las filas desde la hoja. La baja no abre otra vía de abuso: sin el `request_id` de una fila (que solo está en la hoja y en el navegador de quien se apuntó) no se puede borrar, y con uno inventado el script responde `removed:false` sin tocar nada.
+- **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` (afecta a todos los distritos) y borra las filas desde la hoja. La baja no abre otra vía de abuso: sin el `request_id` de una fila (que está en la hoja, y la ven todos sus editores, no solo el dueño, y en el navegador de quien se apuntó) no se puede borrar, y con uno inventado el script responde `removed:false` sin tocar nada.
+
+## Distritos
+
+La misma web, el mismo script y la misma hoja sirven a varios distritos. Diseño: [docs/designs/agenda-multidistricte.md](docs/designs/agenda-multidistricte.md).
+
+| Distrito | URL | Pestaña de eventos | Prefijo de ids |
+|---|---|---|---|
+| Sants-Montjuïc (raíz) | `https://jimi75.github.io/agenda-front-ampli/` | `Esdeveniments` | ninguno |
+| Eixample | `https://jimi75.github.io/agenda-front-ampli/eixample` | `Esdeveniments eixample` | `eix-` |
+
+- **Enlaces sin barra final.** `/eixample/` da el 404 de GitHub Pages; publica siempre `/eixample`.
+- La lista de distritos está solo en `src/lib/districts.js`. El script no la tiene: deduce la pestaña del parámetro `d` (`Esdeveniments <d>`; sin `d`, `Esdeveniments`), así que añadir un distrito no exige una versión nueva del script.
+- `Inscripcions`, `Baixes` y `Config` son compartidas: `Config!B1` y el tope de 3000 inscripciones valen para todos los distritos.
+- **Norma de prefijos.** Los ids de un distrito empiezan por su prefijo (letras minúsculas o números y un guion final, por ejemplo `eix-`; máximo 20 caracteres en total). Los ids de Sants no llevan prefijo y no deben empezar por el prefijo de otro distrito. El código no lo impone: `/<slug>?admin` avisa de los ids sin prefijo.
+- **Riesgo aceptado.** `Inscripcions` no guarda el distrito: si dos distritos repiten un id, las listas de inscritos de esos dos eventos se mezclan.
+- Los ids de ejemplo de [`docs/plantilla-esdeveniments.csv`](docs/plantilla-esdeveniments.csv) (`exemple-1`…) se sustituyen **antes** de importar la plantilla en la pestaña de un distrito.
+- **Los nombres `Esdeveniments <x>` se reservan para distritos**: cualquier pestaña con ese nombre (con `x` de 1 a 30 caracteres `a-z`, `0-9` o `-`) se puede leer con `?action=agenda&d=x` y acepta inscripciones.
+
+### Añadir un distrito
+
+1. **Elegir slug y prefijo** (slug: `/^[a-z0-9-]{1,30}$/`; prefijo: `/^[a-z0-9]+-$/`, que no sea igual ni el comienzo de otro). Comprobar que ningún id de Sants empieza por el prefijo. Pedir los emails de Google de los editores del distrito.
+2. **Añadir la entrada** en `ROUTED_DISTRICTS` de `src/lib/districts.js` (`slug`, `name`, `deName` con la preposición y el artículo, `prefix`).
+3. **Crear la pestaña** `Esdeveniments <slug>` (ver *Crear la pestaña de un distrito*).
+4. **Comprobar que está vacía:** solo la fila 1, y `curl -sL '<exec>?action=agenda&d=<slug>'` devuelve `events: []`.
+5. **Dar acceso a los editores:** compartir la hoja con sus emails y añadirlos a la protección de su pestaña. Que uno de ellos compruebe que puede escribir en su pestaña y no en `Esdeveniments`.
+6. **Desplegar la web** con un push a `main`.
+7. **Comprobar** `/<slug>` en el móvil y `/<slug>?admin` sin avisos de cabeceras ni de prefijos.
+
+### Crear la pestaña de un distrito
+
+`setup` no cambia: no crea pestañas de distrito. Se hace a mano:
+
+1. Clic derecho en la pestaña `Esdeveniments` → **Duplicar**.
+2. Renombrar la copia a `Esdeveniments <slug>` (con un espacio).
+3. Vaciarla: seleccionar desde `A2` hasta la última fila de la columna `K` y pulsar **Supr**. No uses *Eliminar filas*: se conservan el formato de texto y los desplegables. Si quedan filas de Sants, sus ids aparecen en el distrito nuevo y las inscripciones se mezclan.
+4. En **Datos → Proteger hojas y rangos**, comprobar que la copia tiene la protección de la fila 1 con aviso; si no, añadir una para `A1:K1` con *Mostrar una advertencia*.
+5. Proteger la hoja entera con **Restringir quién puede editar → Personalizado**, solo con los emails de los editores del distrito. Si la copia heredó la protección de `Esdeveniments`, editarla: tiene los editores de Sants.
+
+La copia trae la cabecera de 11 columnas (J1 y K1 incluidas), la fila 1 fija, el formato de texto en A:I y los desplegables, que siguen apuntando a `Config`.
+
+### Permisos y protecciones
+
+Todo con **Datos → Proteger hojas y rangos → Hoja → Restringir quién puede editar**, sin cambiar código:
+
+- `Esdeveniments`: *Personalizado*, con los editores de Sants.
+- `Esdeveniments <slug>`: *Personalizado*, con los editores de ese distrito.
+- `Config`, `Inscripcions`, `Baixes` y cualquier otra pestaña: *Solo tú*. Si `Baixes` aún no existe, créala vacía con ese nombre.
+- **Para dar acceso a un editor nuevo:** compartir la hoja con su email como editor y añadirlo a la protección de la pestaña de su distrito.
+- **Solo el dueño publica versiones del script**, y antes compara el script de la hoja con `apps-script/Code.gs` del repositorio: cualquier editor de la hoja puede editar el script asociado, que se ejecuta como el dueño en la siguiente versión publicada.
+- **Lo que no se evita:** cualquier editor puede leer todas las pestañas, incluidos los `request_id` de `Inscripcions`, y editar el script. Se acepta.
+- Estas protecciones conviven con los avisos que crea `setup`. Un editor puede añadir a otra persona a la protección de su pestaña, pero no tocar la de otro distrito.
+
+### Entrega multidistrito: orden de despliegue
+
+**Script, datos, web.** Para este cambio sustituye al orden de arriba.
+
+1. **Backup del script** (pasos 1 y 2 de *Backup y restauración del script*), con su etiqueta `script-vK`.
+2. **Copia CSV de `Inscripcions`** (como en R4, paso 2). Anota el número de filas: si pasa de 1500, decide antes de publicar si subes `MAX_SIGNUPS_TOTAL`.
+3. **Ensayo en una copia del libro** (como en R4, paso 3): pega el `Code.gs` nuevo, crea `Esdeveniments eixample` con la fila `eix-prova-1`, aplica las protecciones y repite los `curl` de lectura y una inscripción y su baja con `d`. Si algo falla, no sigas.
+4. **Publicar el script en el libro real**: *Gestionar implementaciones → ✎ → Versión nueva*. Nunca *Nueva implementación*.
+5. **Comprobar Sants:** `curl -sL '<exec>?action=agenda'` devuelve los mismos eventos y no incluye `district`.
+6. **Crear la pestaña** `Esdeveniments eixample` y añadir `eix-prova-1`.
+7. **Proteger las pestañas** (ver *Permisos y protecciones*) y pedir a un editor de Sants y a uno de Eixample que comprueben que solo escriben en la suya.
+8. **Comprobar Eixample:** `curl -sL '<exec>?action=agenda&d=eixample'` devuelve `district: 'eixample'` y la fila de prueba; con `d=inscripcions` devuelve `unknown_district`.
+9. **Desplegar la web** (push a `main`). Después, en el móvil: abrir `/` y `/eixample`, apuntarse a `eix-prova-1` y darse de baja, compartir `/eixample` por WhatsApp y comprobar el título de la vista previa, y borrar la fila de prueba. Mide la latencia del GET ahora y una semana después.
+
+**Vuelta atrás, en orden inverso:** primero la web (`git revert` y push; `/eixample` vuelve al 404 y Sants funciona con cualquiera de los dos scripts) y después el script (versión anterior en *Gestionar implementaciones*). Con la web nueva y el script antiguo, `/eixample` muestra el error de carga, nunca los eventos de Sants. La pestaña `Esdeveniments eixample` y las filas `eix-` de `Inscripcions` se pueden dejar (siguen contando para el tope de 3000).
 
 ## Backup y restauración del script
 
@@ -200,7 +267,9 @@ El código del script existe en dos sitios que nada obliga a mantener iguales: `
 
 ## Cómo publicar una entrega
 
-La web se despliega con `git push` a `main` (el flujo de CI comprueba, prueba y publica) y el script a mano. El orden es siempre **script, web, datos**:
+La web se despliega con `git push` a `main` (el flujo de CI comprueba, prueba y publica) y el script a mano. El orden habitual es **script, web, datos**. Para la entrega multidistrito (ver *Distritos*) es **script, datos, web**: la pestaña `Esdeveniments <slug>` tiene que existir antes de publicar la web, para que `/<slug>` no muestre un error al salir.
+
+Orden habitual:
 
 1. **Script** (solo si la entrega lo toca, R2 y R4): backup y despliegue según *Backup y restauración del script*. Siempre con *Gestionar implementaciones → ✎ → Versión nueva*, **nunca** *Nueva implementación*, que cambia la URL `/exec`. Los cambios del script son siempre aditivos: la web de antes sigue funcionando con el script nuevo, y la web nueva tolera un script antiguo (si faltan `responsable` o `inscripcio_url` los trata como vacíos).
 2. **Web:** `git push` a `main`.
