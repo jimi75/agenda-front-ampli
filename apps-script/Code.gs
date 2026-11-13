@@ -45,12 +45,26 @@ var REQUEST_ID_TTL_SECONDS = 600;
 // never start with = + - @ and be read as a formula. This copy is the one that counts.
 var NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} .'’·_-]{0,29}$/u;
 var REQUEST_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+// Slug of a district: the events of district d live in the tab 'Esdeveniments <d>'.
+var DISTRICT_RE = /^[a-z0-9-]{1,30}$/;
+
+/** Events tab of district d: SHEET_EVENTS when d is undefined (the root), null when d is not valid. */
+function eventsSheetName_(d) {
+  if (d === undefined) return SHEET_EVENTS;
+  if (typeof d === 'string' && DISTRICT_RE.test(d)) return SHEET_EVENTS + ' ' + d;
+  return null;
+}
 
 function doGet(e) {
   try {
     var action = e && e.parameter && e.parameter.action;
     if (action !== 'agenda') return json_({ ok: false, v: API_VERSION, error: 'bad_request' });
-    return json_(readAgenda_());
+    var d = e.parameter.d;
+    var sheetName = eventsSheetName_(d);
+    if (sheetName === null || (d !== undefined && !SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName))) {
+      return json_({ ok: false, v: API_VERSION, error: 'unknown_district' });
+    }
+    return json_(readAgenda_(sheetName, d));
   } catch (err) {
     console.error(err);
     return json_({ ok: false, v: API_VERSION, error: 'server' });
@@ -70,6 +84,7 @@ function doPost(e) {
     if (action === 'signup') {
       var name = typeof body.name === 'string' ? cleanName_(body.name) : '';
       if (!NAME_RE.test(name)) return fail_('invalid_name');
+      if (body.d !== undefined && eventsSheetName_(body.d) === null) return fail_('unknown_district');
     }
 
     locked = lock.tryLock(LOCK_WAIT_MS);
@@ -93,7 +108,10 @@ function signup_(body, ss, tz) {
   var name = cleanName_(body.name);
   if (!isOpen_(ss)) return fail_('closed');
 
-  var eventIds = readTable_(ss.getSheetByName(SHEET_EVENTS), EVENT_COLUMNS, tz).map(function (r) {
+  var sheetName = eventsSheetName_(body.d);
+  var eventsSheet = ss.getSheetByName(sheetName);
+  if (body.d !== undefined && !eventsSheet) return fail_('unknown_district');
+  var eventIds = readTable_(eventsSheet, EVENT_COLUMNS, tz).map(function (r) {
     return r.id;
   });
   if (eventIds.indexOf(eventId) === -1) return fail_('unknown_event');
@@ -161,10 +179,10 @@ function unsignupAnswer_(eventId, signupRows, removed) {
   return json_({ ok: true, v: API_VERSION, eventId: eventId, names: namesFor_(signupRows, eventId), removed: removed });
 }
 
-function readAgenda_() {
+function readAgenda_(sheetName, d) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone();
-  var eventsSheet = ss.getSheetByName(SHEET_EVENTS);
+  var eventsSheet = ss.getSheetByName(sheetName);
   var events = readTable_(eventsSheet, EVENT_COLUMNS.concat(OPTIONAL_EVENT_COLUMNS), tz);
   var rows = readTable_(ss.getSheetByName(SHEET_SIGNUPS), SIGNUP_COLUMNS, tz);
   var signups = {};
@@ -172,7 +190,7 @@ function readAgenda_() {
     var names = namesFor_(rows, event.id);
     if (names.length) signups[event.id] = names;
   });
-  return {
+  var agenda = {
     ok: true,
     v: API_VERSION,
     signupsOpen: isOpen_(ss),
@@ -183,6 +201,8 @@ function readAgenda_() {
     // What this script can do, so the web only offers what exists (empty on older scripts).
     features: ['unsignup']
   };
+  if (d !== undefined) agenda.district = d;
+  return agenda;
 }
 
 function missingColumns_(sheet, required) {

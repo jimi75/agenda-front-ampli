@@ -612,3 +612,94 @@ test('unsignup: dues persones amb el mateix nom a l’esdeveniment: només cau l
 	assert.ok(inscripcions(script).some((r) => r[3] === R_EVA));
 	assert.ok(!inscripcions(script).some((r) => r[3] === 'req-eva-0002'));
 });
+
+// ---- Multi-district: parameter d ----
+
+const EIX = 'Esdeveniments eixample';
+const setupD = (options = {}) =>
+	setup({
+		extraSheets: { [EIX]: [EVENT_HEADER, eventRow('eix-a'), eventRow('eix-b', { data: '2026-11-20' })] },
+		...options
+	});
+
+test('doGet sense d: la resposta és exactament la d’abans i no porta district', () => {
+	const script = setupD();
+	const agenda = script.get({ action: 'agenda' });
+	assert.deepEqual(agenda, {
+		ok: true,
+		v: 1,
+		signupsOpen: true,
+		missingColumns: [],
+		events: [
+			{ row: 2, id: 'a1', data: '2026-11-12', inici: '10:00', fi: '14:00', tipus: 'Acció', nom: 'Paradeta', lloc: 'Sants', mapa: '', estat: '', responsable: '', inscripcio_url: '' },
+			{ row: 3, id: 'b2', data: '2026-11-14', inici: '10:00', fi: '14:00', tipus: 'Acció', nom: 'Paradeta', lloc: 'Sants', mapa: '', estat: '', responsable: '', inscripcio_url: '' }
+		],
+		signups: { a1: ['Eva'] },
+		features: ['unsignup']
+	});
+	assert.ok(!('district' in agenda));
+});
+
+test('doGet amb d=eixample: llegeix només la seva pestanya i torna district', () => {
+	const script = setupD({ signups: [SIGNUP_HEADER, ['x', 'eix-a', 'Anna', 'req-00000001'], ['x', 'a1', 'Eva', 'req-00000002']] });
+	const agenda = script.get({ action: 'agenda', d: 'eixample' });
+	assert.equal(agenda.district, 'eixample');
+	assert.deepEqual(agenda.events.map((e) => e.id), ['eix-a', 'eix-b']);
+	assert.deepEqual(agenda.signups, { 'eix-a': ['Anna'] });
+});
+
+test('doGet: un d no vàlid o sense pestanya torna unknown_district', () => {
+	const script = setupD();
+	for (const d of ['', 'Inscripcions', '../x', 'EIXAMPLE', 'a'.repeat(31), 'notes']) {
+		assert.deepEqual(script.get({ action: 'agenda', d }), { ok: false, v: 1, error: 'unknown_district' }, JSON.stringify(d));
+	}
+});
+
+test('doGet: una action incorrecta guanya a un d no vàlid', () => {
+	assert.equal(setupD().get({ action: 'x', d: '../x' }).error, 'bad_request');
+});
+
+test('signup amb d=eixample accepta eix-… i rebutja un id de Sants', () => {
+	const script = setupD();
+	const ok = script.post(request('eix-a', 'Eva', { d: 'eixample' }));
+	assert.equal(ok.ok, true);
+	assert.deepEqual(ok.names, ['Eva']);
+	assert.equal(script.post(request('a1', 'Eva', { d: 'eixample' })).error, 'unknown_event');
+});
+
+test('signup sense d rebutja eix-… i sense pestanya Esdeveniments dóna unknown_event', () => {
+	assert.equal(setupD().post(request('eix-a', 'Eva')).error, 'unknown_event');
+	const noTab = createScript({ signups: [SIGNUP_HEADER] });
+	assert.equal(noTab.post(request('a1', 'Eva')).error, 'unknown_event');
+});
+
+test('signup amb d no vàlid es rebutja abans del lock', () => {
+	for (const d of [null, 5, ['eixample'], '']) {
+		const script = setupD();
+		assert.equal(script.post(request('eix-a', 'Eva', { d })).error, 'unknown_district', JSON.stringify(d));
+		assert.equal(script.state.lockAttempts, 0);
+	}
+});
+
+test('signup amb d d’una pestanya inexistent dóna unknown_district', () => {
+	const script = setupD();
+	assert.equal(script.post(request('eix-a', 'Eva', { d: 'notes' })).error, 'unknown_district');
+});
+
+test('signup amb d=eixample i Config!B1 = NO dóna closed', () => {
+	assert.equal(setupD({ config: 'NO' }).post(request('eix-a', 'Eva', { d: 'eixample' })).error, 'closed');
+});
+
+test('el topall de 3000 compta les inscripcions de tots els districtes', () => {
+	const rows = Array.from({ length: 3000 }, (_, i) => ['x', 'a1', 'N', `req-${String(i).padStart(8, '0')}`]);
+	const script = setupD({ signups: [SIGNUP_HEADER, ...rows] });
+	assert.equal(script.post(request('eix-a', 'Eva', { d: 'eixample' })).error, 'closed');
+});
+
+test('unsignup funciona igual amb o sense d', () => {
+	for (const extra of [{}, { d: 'eixample' }, { d: null }]) {
+		const script = setupD({ signups: [SIGNUP_HEADER, ['x', 'eix-a', 'Anna', 'req-00000001']] });
+		const answer = script.post({ action: 'unsignup', eventId: 'eix-a', requestId: 'req-00000001', ...extra });
+		assert.equal(answer.removed, true);
+	}
+});

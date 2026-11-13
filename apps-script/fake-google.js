@@ -155,14 +155,15 @@ const chain = (calls) => {
  * `beforeRead(sheetName, readNumber)` is called when the Nth read (getDataRange) of a sheet starts,
  * before it takes its snapshot: a test can use it to move rows between two reads of the script.
  * `logs` collects what the script writes with console.log (console.error still goes to the console).
- * @param {{ events?: any[][], signups?: any[][], config?: string | null, now?: Date, lockFails?: boolean,
+ * @param {{ events?: any[][], signups?: any[][], extraSheets?: Record<string, any[][]>, config?: string | null, now?: Date, lockFails?: boolean,
  *   beforeRead?: (sheetName: string, readNumber: number) => void }} [options]
  */
-export function createScript({ events, signups, config = 'SI', now = new Date('2026-11-10T09:30:00Z'), lockFails = false, beforeRead } = {}) {
+export function createScript({ events, signups, extraSheets = {}, config = 'SI', now = new Date('2026-11-10T09:30:00Z'), lockFails = false, beforeRead } = {}) {
 	const sheets = new Map();
 	const create = (name, rows) => new FakeSheet(rows, (readNumber) => beforeRead?.(name, readNumber));
 	if (events) sheets.set('Esdeveniments', create('Esdeveniments', events));
 	if (signups) sheets.set('Inscripcions', create('Inscripcions', signups));
+	for (const [name, rows] of Object.entries(extraSheets)) sheets.set(name, create(name, rows));
 	if (config !== null) sheets.set('Config', create('Config', [['inscripcions_obertes', config]]));
 
 	const logs = [];
