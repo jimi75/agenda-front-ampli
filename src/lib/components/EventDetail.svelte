@@ -517,6 +517,7 @@
 		border-top: 8px solid var(--orange);
 	}
 
+	/* From 1024px the detail is a centred panel, so it does not stretch across a wide screen. */
 	@media (min-width: 1024px) {
 		dialog {
 			width: min(40rem, calc(100% - 2rem));

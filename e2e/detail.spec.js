@@ -6,9 +6,6 @@ import { card, cards, detailDialog, openAgenda, signupDialog } from './helpers.j
 /** @param {import('@playwright/test').Page} page @param {string} id */
 const detailLink = (page, id) => card(page, id).getByRole('link', { name: /^Veure el detall de/ });
 
-/** @param {import('@playwright/test').Page} page */
-const isNarrow = (page) => (page.viewportSize()?.width ?? 0) < 1024;
-
 test('«detall» obre el detall amb tota la informació i no toca la barra d’adreces', async ({ page }) => {
 	await openAgenda(page);
 	const before = page.url();
@@ -62,10 +59,69 @@ test('?e= vàlid obre el detall en carregar, sense desplaçar-se al proper dia',
 	expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
-test('sense ?e=, al mòbil la llista s’obre al proper dia amb esdeveniments', async ({ page }) => {
-	test.skip(!isNarrow(page), 'només la llista vertical es desplaça');
+test('sense ?e=, la llista s’obre al proper dia amb esdeveniments', async ({ page }) => {
+	// At 500 px high, day 12 starts below the window, so the «already visible» guard does not apply.
+	await page.setViewportSize({ width: 1280, height: 500 });
+	await openAgenda(page, { waitForCards: false });
+	await cards(page).first().waitFor();
+	const start = await page.locator('#dia-2026-11-12').evaluate((el) => el.getBoundingClientRect().top);
+	expect(start + (await page.evaluate(() => window.scrollY))).toBeGreaterThanOrEqual(500);
+	const top = () => page.locator('#dia-2026-11-12').evaluate((el) => el.getBoundingClientRect().top);
+	await expect.poll(top).toBeLessThanOrEqual(16);
+	expect(await top()).toBeGreaterThanOrEqual(0);
+	expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+});
+
+test('sense ?e=, si el dia de destí ja és visible no es desplaça la pàgina', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 1600 });
 	await openAgenda(page);
-	await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+	const inside = await page
+		.locator('#dia-2026-11-12')
+		.evaluate((el) => el.getBoundingClientRect().top < window.innerHeight);
+	expect(inside).toBe(true);
+	await page.waitForTimeout(300);
+	expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test('sense ?e=, si la pàgina ja té scroll quan arriben les dades no hi ha salt', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 600 });
+	let release = () => {};
+	const held = new Promise((resolve) => (release = () => resolve(undefined)));
+	await openAgenda(page, {
+		waitForCards: false,
+		prepare: () => {
+			// Registered after the script mock, so it runs first and releases the request later.
+			void page.route(/^http:\/\/localhost:5301\/exec/, async (route) => {
+				await held;
+				await route.fallback();
+			});
+		}
+	});
+	// The loading notice is short: give the page some height so it can scroll.
+	await page.evaluate(() => {
+		document.body.style.minHeight = '3000px';
+		window.scrollTo(0, 50);
+	});
+	expect(await page.evaluate(() => window.scrollY)).toBe(50);
+	release();
+	await cards(page).first().waitFor();
+	await page.waitForTimeout(300);
+	expect(await page.evaluate(() => window.scrollY)).toBe(50);
+});
+
+test('mòbil: si el dia de destí ja és visible en carregar, no es desplaça la pàgina', async ({
+	page,
+	isMobile
+}) => {
+	test.skip(!isMobile, 'prova del perfil mòbil (CUJ 4)');
+	await page.setViewportSize({ width: 390, height: 1600 });
+	await openAgenda(page);
+	const inside = await page
+		.locator('#dia-2026-11-12')
+		.evaluate((el) => el.getBoundingClientRect().top < window.innerHeight);
+	expect(inside).toBe(true);
+	await page.waitForTimeout(300);
+	expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
 
 test('?e= amb un id mal format no obre res', async ({ page }) => {
@@ -208,7 +264,7 @@ test('un esdeveniment amb inscripció externa també ofereix les dues accions d�
 	await expect(detail.getByRole('button', { name: T.share.customImage, exact: true })).toBeVisible();
 });
 
-for (const width of [390, 1024, 1100, 1280]) {
+for (const width of [390, 1024, 1280, 1920]) {
 	test(`${width} px: «detall» és tocable, no hi ha desbordament i el detall té la mida prevista`, async ({
 		page,
 		isMobile
@@ -254,9 +310,11 @@ for (const width of [390, 1024, 1100, 1280]) {
 			expect(panel?.width).toBeLessThan(width - 100);
 			expect(Math.abs((panel?.x ?? 0) * 2 + (panel?.width ?? 0) - width)).toBeLessThanOrEqual(1);
 			expect(panel?.height).toBeLessThan((viewport?.height ?? 0) - 20);
-			// The grid stays visible behind the dimmed panel.
-			await expect(page.locator('ul.weekdays')).toBeVisible();
-			expect((await page.locator('.calendar').boundingBox())?.width).toBeGreaterThan(panel?.width ?? 0);
+			// The list is a centred column of at most 720 px, with no weekday row.
+			await expect(page.locator('ul.weekdays')).toHaveCount(0);
+			const calendar = await page.locator('.calendar').boundingBox();
+			expect(calendar?.width).toBeLessThanOrEqual(720);
+			expect(Math.abs((calendar?.x ?? 0) * 2 + (calendar?.width ?? 0) - width)).toBeLessThanOrEqual(1);
 		}
 	});
 }

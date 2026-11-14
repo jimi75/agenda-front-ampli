@@ -2,8 +2,7 @@
 
 Web estática, en catalán, con las acciones y actos de **noviembre de 2026** del distrito de Sants-Montjuïc. Se publica en GitHub Pages y lee los datos de una hoja de Google.
 
-- Pantalla grande (desde 1024 px): cuadrícula tipo tablero, semana desde dilluns.
-- Móvil: lista vertical, un día tras otro, solo los días con eventos. Se abre en el próximo día con eventos.
+- Lista vertical en todos los anchos, en una columna centrada de 720 px como máximo: un día tras otro, solo los días con eventos. Se abre en el próximo día con eventos, salvo que la página ya tenga scroll o ese día ya se vea.
 - Dos tipos: **Accions** (tarjeta lima) y **Actes** (tarjeta rojiza). Cada tarjeta lleva el nombre del tipo escrito, no solo el color.
 - Cada tarjeta tiene un enlace **detall** (arriba a la derecha, en la línea del tipo) que abre el detalle del evento: a pantalla completa en móvil y como panel centrado desde 1024 px. Muestra tipo, nombre, fecha y hora, lugar con enlace a Google Maps, recuento y lista de apuntados. Tocar la tarjeta en otro sitio no hace nada.
 - Cada evento abierto tiene botón **Participar**: abre un modal pequeño con el formulario (solo nombre o apodo). La tarjeta y el detalle muestran el recuento; la lista de apuntados está en el detalle. En un evento pasado, cancelado o con las inscripciones cerradas, la tarjeta ofrece **Veure apuntats**, que abre el detalle en solo lectura.
@@ -328,7 +327,7 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 
 ## Decisiones y límites
 
-- **Solo del 2 al 29 de noviembre de 2026.** Son cuatro semanas completas (de lunes a domingo), así que la cuadrícula no tiene casillas vacías. Los días están en `src/lib/config.js` (`MONTH.firstDay` y `MONTH.lastDay`) y, para la lista desplegable de la hoja, en `FIRST_DAY` y `LAST_DAY` de `apps-script/Code.gs`. Para otro mes habría que cambiar los dos sitios, el año y el mes en ambos, y los tests. Si cambias las fechas del script, vuelve a ejecutar `setup`: reconstruye la lista y borra las fechas sobrantes.
+- **Solo del 2 al 29 de noviembre de 2026.** Son cuatro semanas completas (de lunes a domingo). Los días están en `src/lib/config.js` (`MONTH.firstDay` y `MONTH.lastDay`) y, para la lista desplegable de la hoja, en `FIRST_DAY` y `LAST_DAY` de `apps-script/Code.gs`. Para otro mes habría que cambiar los dos sitios, el año y el mes en ambos, y los tests. Si cambias las fechas del script, vuelve a ejecutar `setup`: reconstruye la lista y borra las fechas sobrantes.
 - **Horas del desplegable (de 08:00 a 22:00).** Salen de `FIRST_TIME` y `LAST_TIME` en `apps-script/Code.gs`, en minutos desde las 00:00. Si solo borras celdas en `Config!F`, el desplegable cambia al momento, pero `setup` reconstruye esa lista desde el código y recupera el rango anterior; por eso el cambio duradero se hace en el código y se vuelve a ejecutar `setup`. Es solo una ayuda al rellenar la hoja: la web muestra cualquier hora válida (`HH:MM`) y un pegado la salta.
 - **Si Google falla**: la web muestra la última copia guardada en el dispositivo con el aviso "Dades de fa X min". Si no hay copia, muestra un error con botón *Torna-ho a provar*, nunca un calendario vacío.
 - **Si se envía un nombre y la respuesta no llega**, la web no reenvía: vuelve a leer la lista y, si el nombre está, da la inscripción por hecha.

@@ -1,5 +1,7 @@
 # Agenda Frontamplista Sants-Montjuïc: detalle de evento, imagen, compartir y baja de inscripción
 
+> Nota (2026-11-14): la lista ya no es una cuadrícula y el panel de ≥1024px ya no deja el calendario visible detrás; ver [lista-movil-todos-anchos.md](./lista-movil-todos-anchos.md).
+
 *   **Author:** Juan Peist
 *   **Status:** Proposed
 *   **Date:** 2026-11-11

@@ -305,29 +305,4 @@
 		opacity: 0.7;
 		cursor: progress;
 	}
-
-	/* The grid starts at 1024px, where each day column is only about 140px wide. */
-	@media (min-width: 1024px) and (max-width: 1279px) {
-		.event {
-			padding: 0.5rem 0.5rem 0.6rem;
-		}
-
-		.name {
-			font-size: 1.2rem;
-		}
-
-		.time {
-			font-size: 1.1rem;
-		}
-
-		.place {
-			font-size: 1rem;
-		}
-
-		button,
-		.button {
-			padding: 0 0.6rem;
-			font-size: 0.85rem;
-		}
-	}
 </style>

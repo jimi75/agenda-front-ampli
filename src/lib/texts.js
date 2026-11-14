@@ -6,7 +6,6 @@ export const T = {
 		`Accions i actes de ${MONTH.name} de ${MONTH.year} al districte ${district.deName}.`,
 	monthLabel: `${MONTH.name} ${MONTH.year}`,
 	weekdays: ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte', 'diumenge'],
-	weekdaysShort: ['dl.', 'dt.', 'dc.', 'dj.', 'dv.', 'ds.', 'dg.'],
 	types: { accio: 'Acció', acte: 'Acte' },
 	legendLabel: 'Tipus d’activitat',
 	today: 'Avui',

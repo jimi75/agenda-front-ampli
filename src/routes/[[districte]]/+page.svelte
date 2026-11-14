@@ -105,14 +105,18 @@
 		}
 	}
 
-	/** On a phone the list starts at the next day with events instead of at the 1st. */
+	/** The list starts at the next day with events, unless the page was already scrolled. */
 	async function anchorToUpcoming() {
 		await tick();
-		if (window.matchMedia('(min-width: 1024px)').matches) return;
+		if (window.scrollY > 0) return;
 		const withEvents = month.days.filter((d) => byDate.has(d.date));
 		const next = withEvents.find((d) => d.date >= today);
 		if (!next || next === withEvents[0]) return;
-		document.getElementById(`dia-${next.date}`)?.scrollIntoView({ block: 'start' });
+		const el = document.getElementById(`dia-${next.date}`);
+		if (!el) return;
+		const top = el.getBoundingClientRect().top;
+		if (top >= 0 && top < window.innerHeight) return;
+		el.scrollIntoView({ block: 'start' });
 	}
 
 	/** @param {import('#lib/events.js').AgendaEvent | null} event */

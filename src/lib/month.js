@@ -17,7 +17,7 @@ export function isoDate(year, month, day) {
 
 /**
  * @param {MonthRange} [range]
- * @returns {{ year: number, month: number, days: Day[], firstWeekday: number, rows: number }}
+ * @returns {{ year: number, month: number, days: Day[], firstWeekday: number }}
  */
 export function buildMonth(range = MONTH) {
 	const { year, month } = range;
@@ -30,7 +30,7 @@ export function buildMonth(range = MONTH) {
 		day: firstDay + i,
 		weekday: (firstWeekday + i) % 7
 	}));
-	return { year, month, days, firstWeekday, rows: Math.ceil((firstWeekday + days.length) / 7) };
+	return { year, month, days, firstWeekday };
 }
 
 /** Today in the campaign time zone as YYYY-MM-DD, whatever the device time zone is. */

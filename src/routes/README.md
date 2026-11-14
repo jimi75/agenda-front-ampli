@@ -12,7 +12,7 @@ SvelteKit routes. A static page, `[[districte]]`, served at `/` (root district) 
 ## Invariants
 - [[[districte]]/+page.svelte](<./[[districte]]/+page.svelte>) picks the API in `onMount`: `VITE_AGENDA_API_URL` set → `createApi`; else `import.meta.env.DEV` → `createMockApi` (dynamic import); else `status = 'error'`.
 - A silent refresh (`load({ silent: true })`) never replaces fresh data with a stale offline copy (`staleSince !== null`) and never shows errors; refresh on `visibilitychange` happens only after `REFRESH_AFTER_MS` (120000) and while `status === 'ready'`.
-- The `?e=<id>` link is read once after the first successful load via `parseEventParam`; with no link, the list on narrow screens (below `min-width: 1024px`) scrolls to the next day with events.
+- The `?e=<id>` link is read once after the first successful load via `parseEventParam`; with no link, the list scrolls to the next day with events, unless the page is already scrolled or that day is already visible.
 - `unreadable` (no valid events and `missingColumns` or skipped rows present) shows an error with retry instead of an empty calendar.
 - The `?admin` query parameter only reveals the diagnostics block (features, local sign-ups, missing columns of `eventsTabName(district)`, skipped rows and, on a district page, ids without the district prefix).
 - `Calendar` receives `mine`, `data.features` and the same `unsignup` handler as `SignupDialog`, so a card can remove the browser's own signup directly.

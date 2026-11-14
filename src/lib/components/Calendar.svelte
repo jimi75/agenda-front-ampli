@@ -22,12 +22,7 @@
 </script>
 
 <div class="calendar">
-	<ul class="weekdays" aria-hidden="true">
-		{#each T.weekdays as weekday (weekday)}
-			<li>{weekday}</li>
-		{/each}
-	</ul>
-	<ol class="days" style:--first={month.firstWeekday + 1}>
+	<ol class="days">
 		{#each month.days as d (d.date)}
 			{@const events = byDate.get(d.date) ?? []}
 			{@const past = today !== '' && d.date < today}
@@ -67,13 +62,9 @@
 <style>
 	.calendar {
 		width: 100%;
-		max-width: 90rem;
+		max-width: 45rem;
 		margin: 0 auto;
 		padding: 1rem;
-	}
-
-	.weekdays {
-		display: none;
 	}
 
 	.days {
@@ -120,69 +111,5 @@
 
 	.today .day-head {
 		color: var(--ink);
-	}
-
-	@media (min-width: 1024px) {
-		.weekdays {
-			display: grid;
-			grid-template-columns: repeat(7, minmax(0, 1fr));
-			margin: 0;
-			padding: 0;
-			list-style: none;
-			background: var(--rust);
-			color: var(--lime);
-			font-family: var(--font-display);
-			font-size: 1.15rem;
-			text-align: center;
-			text-transform: uppercase;
-		}
-
-		.weekdays li {
-			padding: 0.35rem 0.25rem;
-		}
-
-		.days {
-			display: grid;
-			grid-template-columns: repeat(7, minmax(0, 1fr));
-			grid-auto-rows: minmax(11.5rem, auto);
-			gap: 0;
-			border-left: 1px solid var(--lime-dark);
-			border-top: 1px solid var(--lime-dark);
-		}
-
-		.day:first-child {
-			grid-column-start: var(--first);
-		}
-
-		.day,
-		.day.empty {
-			display: flex;
-			gap: 0.4rem;
-			padding: 0.4rem;
-			background: #fff;
-			border-right: 1px solid var(--lime-dark);
-			border-bottom: 1px solid var(--lime-dark);
-		}
-
-		.day.today {
-			outline: 4px solid var(--orange);
-			outline-offset: -4px;
-		}
-
-		.day-head {
-			font-size: 1.5rem;
-			justify-content: space-between;
-		}
-
-		.wd,
-		.of {
-			position: absolute;
-			width: 1px;
-			height: 1px;
-			margin: -1px;
-			overflow: hidden;
-			clip: rect(0 0 0 0);
-			white-space: nowrap;
-		}
 	}
 </style>
