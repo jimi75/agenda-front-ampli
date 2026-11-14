@@ -1,4 +1,4 @@
-import { REQUEST_TIMEOUT_MS } from './config.js';
+import { MAX_COPY_AGE_MS, REQUEST_TIMEOUT_MS } from './config.js';
 import { mineKey, ROOT_DISTRICT, storageKey } from './districts.js';
 import { addMine, removeMine } from './my-signups.js';
 
@@ -12,6 +12,7 @@ import { addMine, removeMine } from './my-signups.js';
  * @typedef {{ ok: true, names: string[], removed: boolean } | { ok: false, error: string }} UnsignResult
  * @typedef {{
  *   loadAgenda: () => Promise<LoadedAgenda>,
+ *   loadCopy?: () => { agenda: Agenda, at: number } | null,
  *   signup: (eventId: string, name: string, knownCount: number) => Promise<SignupResult>,
  *   unsignup: (eventId: string, requestId: string) => Promise<UnsignResult>
  * }} AgendaApi
@@ -114,6 +115,14 @@ export function createApi({
 	}
 
 	return {
+		/** The stored copy, only if it is young enough to be shown before the live data arrives. */
+		loadCopy() {
+			const copy = readCopy();
+			if (!copy || !Number.isFinite(copy.at)) return null;
+			const age = now() - copy.at;
+			return age < 0 || age > MAX_COPY_AGE_MS ? null : copy;
+		},
+
 		async loadAgenda() {
 			try {
 				return { ...(await fetchAgenda()), staleSince: null };

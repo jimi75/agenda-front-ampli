@@ -16,6 +16,9 @@ export const MAX_MANAGER_LENGTH = 60;
 
 export const REQUEST_TIMEOUT_MS = 15000;
 
+// The longest age at which a stored copy of the agenda is shown before the live data arrives.
+export const MAX_COPY_AGE_MS = 3_600_000;
+
 export const STORAGE_KEY = 'agenda-sants-montjuic-2026-11';
 
 export const MY_SIGNUPS_KEY = 'agenda-sants-montjuic-2026-11:mine';

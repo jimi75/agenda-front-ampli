@@ -375,7 +375,7 @@ Static SvelteKit site (`adapter-static`, prerendered) that reads and writes its 
 ## Global Side Effects
 
 - Google Sheet tabs `Esdeveniments`, `Inscripcions`, `Baixes`, `Config` (through `apps-script/Code.gs`).
-- Browser `localStorage` keys `agenda-sants-montjuic-2026-11` (offline copy) and `agenda-sants-montjuic-2026-11:mine` (own sign-ups).
+- Browser `localStorage` keys `agenda-sants-montjuic-2026-11` (offline copy, also shown first on load if at most 1 h old, then refreshed silently) and `agenda-sants-montjuic-2026-11:mine` (own sign-ups).
 - `npm run build` writes `build/`; `.github/workflows/deploy.yml` publishes it to GitHub Pages.
 
 ## System Verification

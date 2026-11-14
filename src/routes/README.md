@@ -11,6 +11,7 @@ SvelteKit routes. A static page, `[[districte]]`, served at `/` (root district) 
 
 ## Invariants
 - [[[districte]]/+page.svelte](<./[[districte]]/+page.svelte>) picks the API in `onMount`: `VITE_AGENDA_API_URL` set → `createApi`; else `import.meta.env.DEV` → `createMockApi` (dynamic import); else `status = 'error'`.
+- On mount, a valid `api.loadCopy()` is rendered at once (`staleSince: null`, no offline notice) and a silent load follows. If `?e=` names an event missing from the copy, or there is no valid copy, the page waits for live data. A `event_full`, `unknown_event` or `closed` signup error triggers a silent reload.
 - A silent refresh (`load({ silent: true })`) never replaces fresh data with a stale offline copy (`staleSince !== null`) and never shows errors; refresh on `visibilitychange` happens only after `REFRESH_AFTER_MS` (120000) and while `status === 'ready'`.
 - The `?e=<id>` link is read once after the first successful load via `parseEventParam`; with no link, the list scrolls to the next day with events, unless the page is already scrolled or that day is already visible.
 - `unreadable` (no valid events and `missingColumns` or skipped rows present) shows an error with retry instead of an empty calendar.

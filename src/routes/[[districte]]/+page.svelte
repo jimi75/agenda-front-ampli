@@ -156,6 +156,7 @@
 		} else if (result.error === 'closed') {
 			data = { ...data, signupsOpen: false };
 		}
+		if (!result.ok && ['event_full', 'unknown_event', 'closed'].includes(result.error)) load({ silent: true });
 		return result;
 	}
 
@@ -188,10 +189,17 @@
 			status = 'error';
 			return;
 		}
-		await load();
-		if (status !== 'ready') return;
-		// A shared link is read once, here: a failed first load does not read it again on retry.
 		const linkedId = parseEventParam(location.search);
+		const copy = api.loadCopy?.() ?? null;
+		// A copy without the linked event cannot answer the link: wait for the live data instead.
+		if (copy && (linkedId === null || copy.agenda.events.some((e) => /** @type {any} */ (e)?.id === linkedId))) {
+			apply({ ...copy.agenda, staleSince: null });
+			load({ silent: true });
+		} else {
+			await load();
+			if (status !== 'ready') return;
+		}
+		// A shared link is read once, here: a failed first load does not read it again on retry.
 		if (linkedId === null) {
 			anchorToUpcoming();
 		} else {

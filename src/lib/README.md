@@ -28,6 +28,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [api.js](./api.js) `createApi` sends `d=<slug>` (GET and signup POST) only when `district !== ROOT_DISTRICT`; `parseAgenda` requires `json.district === district.slug` on a district page and no `district` on the root, so a district never shows the events of another (older scripts send no `district`).
 - [api.js](./api.js) `signup` never resends blindly after a failed/unreadable answer: `recover` re-reads the agenda and succeeds only if the name appears and the count exceeds `knownCount`; otherwise `network` or `unconfirmed`.
 - [api.js](./api.js) `unsignup` removes the local record (`removeMine`) only when the server answers `ok` with `names` and a boolean `removed`; network failure returns `{ ok: false, error: 'network' }` without recovery.
+- [api.js](./api.js) `loadCopy()` returns the stored copy only if it is finite-dated and at most `MAX_COPY_AGE_MS` (1 h) old, else `null`; the page shows it first and refreshes silently.
 - [api.js](./api.js) `loadAgenda` falls back to the stored copy (`staleSince` = copy timestamp) only when the network fetch fails; with no valid copy the original error is rethrown.
 - [my-signups.js](./my-signups.js) storage format is `{ v: 1, items }`; corrupt JSON, wrong version, missing storage or malformed items read as an empty list, and all storage failures are swallowed.
 - [state.js:participationState](./state.js) priority is past, cancelled, external, closed, open.

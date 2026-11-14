@@ -5,7 +5,7 @@
 Aplazado del diseño multidistrito:
 
 - Formato y protección A:K en todas las pestañas de eventos.
-- Caché de la agenda con CacheService (cada inscripción tendría que borrar la caché de todos los distritos).
+- Caché de servidor (CacheService): descartada; se usa solo la copia del navegador (stale-while-revalidate, ver docs/designs/cache-navegador-agenda.md).
 - Código de error propio para el tope de 3000 inscripciones.
 - Eventos cancelados en `signup_`.
 - `404.html` para la barra final (`/eixample/`).

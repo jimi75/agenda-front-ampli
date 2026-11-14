@@ -466,3 +466,35 @@ test('Eixample amb un script antic (sense district) falla i no mostra la còpia 
 	});
 	await assert.rejects(api.loadAgenda(), /bad_response/);
 });
+
+test('loadCopy: només torna una còpia vàlida i prou jove', async () => {
+	const storage = memoryStorage();
+	let time = 1_000_000;
+	const api = createApi({
+		url: 'https://example.test/exec',
+		storage,
+		now: () => time,
+		fetchFn: /** @type {any} */ (async () => reply(agendaJson({ a1: ['Eva'] })))
+	});
+	assert.equal(api.loadCopy?.(), null, 'sense còpia');
+	await api.loadAgenda();
+	const key = 'agenda-sants-montjuic-2026-11';
+	assert.deepEqual(api.loadCopy?.()?.agenda.signups.get('a1'), ['Eva']);
+	assert.equal(api.loadCopy?.()?.at, 1_000_000);
+
+	time += 3_600_000;
+	assert.ok(api.loadCopy?.(), 'just al límit encara val');
+	time += 1;
+	assert.equal(api.loadCopy?.(), null, 'passada una hora ja no es mostra primer');
+
+	time = 999_999;
+	assert.equal(api.loadCopy?.(), null, 'una còpia del futur no val');
+
+	time = 1_000_000;
+	storage.setItem(key, '{no és json');
+	assert.equal(api.loadCopy?.(), null, 'còpia corrompuda');
+	storage.setItem(key, JSON.stringify({ json: agendaJson() }));
+	assert.equal(api.loadCopy?.(), null, 'sense at');
+	storage.setItem(key, JSON.stringify({ at: 'ahir', json: agendaJson() }));
+	assert.equal(api.loadCopy?.(), null, 'at que no és un número');
+});

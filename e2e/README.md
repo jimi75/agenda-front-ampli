@@ -16,6 +16,7 @@ Playwright browser tests (`*.spec.js`) plus the non-test infrastructure they rel
 
 ## Side Effects
 - [serve.js](./serve.js): spawns `npx vite build` (writes `build/`) and a long-running `vite preview` on port 5300; forwards SIGINT/SIGTERM.
+- `cache.spec.js` covers the copy-first render; `delayMs` in `script.js` delays GET agenda answers.
 - Specs and helpers drive a real browser, read/write its `localStorage` and intercept network routes; no external network.
 
 ## Verification

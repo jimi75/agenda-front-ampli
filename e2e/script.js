@@ -60,7 +60,8 @@ const seedEvents = () => [
  *   down?: boolean,
  *   loseAnswer?: boolean,
  *   features?: string[],
- *   noDistrict?: boolean
+ *   noDistrict?: boolean,
+ *   delayMs?: number
  * }} ScriptOptions
  */
 
@@ -99,6 +100,8 @@ export async function installScript(page, options = {}) {
 		if (options.features) result.features = options.features;
 		// An older script ignores `d` and does not know `district`.
 		if (options.noDistrict) delete result.district;
+		// Holds back the agenda answer, like a slow script.
+		if (options.delayMs) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
 		return answer(route, result);
 	});
 
