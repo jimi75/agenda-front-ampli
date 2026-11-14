@@ -14,7 +14,8 @@ export const ROOT_DISTRICT = Object.freeze({
 /** Districts with their own page, `/<slug>`: all but the root. */
 /** @type {readonly District[]} */
 export const ROUTED_DISTRICTS = Object.freeze([
-	Object.freeze({ slug: 'eixample', name: 'Eixample', deName: 'de l’Eixample', prefix: 'eix-' })
+	Object.freeze({ slug: 'eixample', name: 'Eixample', deName: 'de l’Eixample', prefix: 'eix-' }),
+	Object.freeze({ slug: 'sant-marti', name: 'Sant Martí', deName: 'de Sant Martí', prefix: 'sm-' })
 ]);
 
 /** @param {string} slug @returns {District | null} */
