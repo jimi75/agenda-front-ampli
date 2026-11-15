@@ -80,7 +80,7 @@ export function cleanParams(name, params = {}) {
 }
 
 /**
- * @typedef {Pick<Window, 'addEventListener'> & { dataLayer?: unknown[], gtag?: (...args: unknown[]) => void } & Record<`ga-disable-${string}`, boolean>} AnalyticsWindow
+ * @typedef {Pick<Window, 'addEventListener'> & { dataLayer?: unknown[], gtag?: (...args: unknown[]) => void }} AnalyticsWindow
  * @typedef {Pick<Document, 'title' | 'cookie'> & {
  *   createElement: (tag: 'script') => HTMLScriptElement,
  *   head: { append: (element: HTMLScriptElement) => void }
@@ -115,7 +115,7 @@ export function createAnalytics(deps) {
 			for (const name of ['_ga', `_ga_${id.slice(2)}`]) doc.cookie = `${name}=; max-age=0; path=${cookiePath}`;
 			writeConsent(storage, 'denied', now());
 			if (!loaded) return;
-			win[`ga-disable-${id}`] = true;
+			Reflect.set(win, `ga-disable-${id}`, true);
 			gtag('consent', 'update', { analytics_storage: 'denied' });
 			reload();
 		},
