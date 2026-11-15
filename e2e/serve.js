@@ -6,6 +6,7 @@ const env = {
 	...process.env,
 	NODE_ENV: 'production',
 	BASE_PATH: '/agenda-front-ampli',
+	VITE_GA_ID: 'G-TEST000000',
 	VITE_AGENDA_API_URL: 'http://localhost:5301/exec'
 };
 

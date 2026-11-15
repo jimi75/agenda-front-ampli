@@ -1,6 +1,7 @@
 // The Google script, running inside the test: the real apps-script/Code.gs against a fake sheet,
 // answering the browser's requests to the script URL. No second server and no control endpoints.
 import { createScript, EVENT_HEADER_OPTIONAL, SIGNUP_HEADER } from '../apps-script/fake-google.js';
+import { TODAY } from './helpers.js';
 
 export const SCRIPT_URL = 'http://localhost:5301/exec';
 
@@ -62,6 +63,7 @@ const seedEvents = () => [
  *   features?: string[],
  *   noDistrict?: boolean,
  *   delayMs?: number
+ *   consent?: 'denied' | 'granted' | null
  * }} ScriptOptions
  */
 
@@ -72,6 +74,27 @@ const seedEvents = () => [
  * @param {ScriptOptions} [options]
  */
 export async function installScript(page, options = {}) {
+	const consent = options.consent === undefined ? 'denied' : options.consent;
+	const CONSENT_AT = Date.parse(TODAY) - 9 * 86_400_000;
+	if (consent !== null) {
+		await page.addInitScript(({ consent, at }) => {
+			if (localStorage.getItem('agenda-front-ampli:consent') === null) {
+				localStorage.setItem('agenda-front-ampli:consent', JSON.stringify({ v: 1, analytics: consent, at }));
+			}
+		}, { consent, at: CONSENT_AT });
+	}
+	/** @type {string[]} */
+	const googleRequests = [];
+	/** @param {import('@playwright/test').Route} route */
+	const interceptGoogle = (route) => {
+		const url = route.request().url();
+		googleRequests.push(url);
+		return new URL(url).pathname === '/gtag/js'
+			? route.fulfill({ contentType: 'text/javascript', body: '' })
+			: route.abort();
+	};
+	await page.route('**/*googletagmanager.com/**', interceptGoogle);
+	await page.route('**/*google-analytics.com/**', interceptGoogle);
 	const script = createScript({
 		events: seedEvents(),
 		signups: [SIGNUP_HEADER],
@@ -107,6 +130,7 @@ export async function installScript(page, options = {}) {
 
 	return {
 		script,
+		googleRequests: () => [...googleRequests],
 		/** Rows of `Inscripcions` without the header: [data_hora, event_id, nom, request_id]. */
 		signups: () => script.sheets.get('Inscripcions')?.rows.slice(1) ?? [],
 		/** Rows of `Baixes` without the header (the sheet only exists after the first unsignup). */

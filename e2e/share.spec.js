@@ -14,7 +14,7 @@ import {
 } from './helpers.js';
 
 const ID = 'accio-1';
-const DETAIL_URL = `http://localhost:5300/agenda-front-ampli/?e=${ID}`;
+const DETAIL_URL = `http://localhost:5300/agenda-front-ampli/?e=${ID}&utm_source=compartir&utm_medium=share`;
 const EXPECTED_TEXT =
 	`📢 *Paradeta al mercat* 📢\n\n🗓️ Dijous 12 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: ${DETAIL_URL}`;
 const WA_LINK = `https://wa.me/?text=${encodeURIComponent(EXPECTED_TEXT)}`;
@@ -380,7 +380,7 @@ for (const file of [
 
 test('imatge pròpia en una inscripció externa: el text enllaça al detall de l’app', async ({ page }) => {
 	const expectedText =
-		'📢 *Jornada amb inscripció externa* 📢\n\n🗓️ Dijous 19 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: http://localhost:5300/agenda-front-ampli/?e=ext-1';
+		'📢 *Jornada amb inscripció externa* 📢\n\n🗓️ Dijous 19 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: http://localhost:5300/agenda-front-ampli/?e=ext-1&utm_source=compartir&utm_medium=share';
 	const { custom, downloads, waLink } = await openDetail(page, { query: 'e=ext-1' });
 	await shareOwnImage(page, custom, {
 		name: 'external.png',
