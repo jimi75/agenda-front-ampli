@@ -1,5 +1,5 @@
 <script>
-	import { tick } from 'svelte';
+	import { getContext, tick } from 'svelte';
 	import { MAX_NAME_LENGTH } from '#lib/config.js';
 	import { formatRange } from '#lib/events.js';
 	import { validateName } from '#lib/names.js';
@@ -18,6 +18,7 @@
 	 * }}
 	 */
 	let { event, dateLabel, features, mine, onsubmit, onunsign, ondone, onclose } = $props();
+	const analytics = /** @type {import('#lib/analytics.js').Analytics} */ (getContext('analytics'));
 
 	const CONFIRM_MS = 5000;
 
@@ -156,6 +157,7 @@
 						href={externalUrl}
 						target="_blank"
 						rel="noopener noreferrer"
+						onclick={() => analytics.track('external_link_click', { activitat_id: event.id })}
 						aria-label={T.dialog.goExternalLabel}>{T.dialog.goExternal}</a
 					>
 				{/if}

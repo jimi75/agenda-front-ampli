@@ -1,5 +1,5 @@
 <script>
-	import { onMount, setContext, tick } from 'svelte';
+	import { getContext, onMount, setContext, tick } from 'svelte';
 	import { browserStorage, createApi } from '#lib/api.js';
 	import Calendar from '#lib/components/Calendar.svelte';
 	import EventDetail from '#lib/components/EventDetail.svelte';
@@ -10,7 +10,7 @@
 	import { groupByDate, normalizeEvents, parseEventParam } from '#lib/events.js';
 	import { buildMonth, todayIso } from '#lib/month.js';
 	import { readMine } from '#lib/my-signups.js';
-	import { detailUrl } from '#lib/share.js';
+	import { shareUrl } from '#lib/share.js';
 	import { participationState } from '#lib/state.js';
 	import { T } from '#lib/texts.js';
 
@@ -20,6 +20,7 @@
 	// svelte-ignore state_referenced_locally
 	const district = page.district;
 	setContext('district', district);
+	const analytics = /** @type {import('#lib/analytics.js').Analytics} */ (getContext('analytics'));
 
 	const month = buildMonth();
 	const API_URL = import.meta.env.VITE_AGENDA_API_URL ?? '';
@@ -63,7 +64,7 @@
 	const detailState = $derived(
 		detailEvent ? participationState(detailEvent, { today, signupsOpen: data?.signupsOpen ?? true }) : null
 	);
-	const detailLink = $derived(detailEvent ? detailUrl(location, detailEvent.id) : '');
+	const detailLink = $derived(detailEvent ? shareUrl(location, detailEvent.id) : '');
 	const staleMinutes = $derived(
 		data?.staleSince ? Math.max(0, Math.round((Date.now() - data.staleSince) / 60_000)) : 0
 	);
@@ -126,8 +127,17 @@
 	}
 
 	/** @param {string} id */
+	const findEvent = (id) => data?.events.find((e) => e.id === id) ?? null;
+	/** @param {import('#lib/events.js').AgendaEvent} event */
+	const base = (event) => ({ activitat_id: event.id, activitat_tipus: event.type });
+	/** @param {import('#lib/events.js').AgendaEvent} event */
+	const signupParams = (event) => ({ ...base(event), externa: event.externalUrl ? 'si' : 'no' });
+
+	/** @param {string} id */
 	function openDetail(id) {
 		detailId = id;
+		const event = findEvent(id);
+		if (event) analytics.track('event_detail_view', { ...base(event), origen: 'card' });
 	}
 
 	function closeDetail() {
@@ -142,6 +152,8 @@
 	/** @param {string} id */
 	function openSignup(id) {
 		signupId = id;
+		const event = findEvent(id);
+		if (event) analytics.track('signup_start', signupParams(event));
 		load({ silent: true });
 	}
 
@@ -156,7 +168,16 @@
 		// read before any await; the dialog may already be closed
 		const id = signupId;
 		if (!api || !id || !data) return { ok: false, error: 'server' };
-		const result = await api.signup(id, name, data.signups.get(id)?.length ?? 0);
+		const event = findEvent(id);
+		const params = event ? signupParams(event) : { activitat_id: id };
+		let result;
+		try {
+			result = await api.signup(id, name, data.signups.get(id)?.length ?? 0);
+		} catch (error) {
+			analytics.track('signup_error', { ...params, error_type: 'exception' });
+			throw error;
+		}
+		analytics.track(result.ok ? 'signup_success' : 'signup_error', result.ok ? params : { ...params, error_type: result.error });
 		mine = readMine(browserStorage(), mineKey(district));
 		if (result.ok) {
 			data = { ...data, signups: new Map(data.signups).set(id, result.names) };
@@ -171,6 +192,7 @@
 	async function unsignup(eventId, requestId) {
 		if (!api) return { ok: false, error: 'server' };
 		const result = await api.unsignup(eventId, requestId);
+		analytics.track('unsignup', { activitat_id: eventId, resultat: result.ok ? 'ok' : 'error' });
 		mine = readMine(browserStorage(), mineKey(district));
 		if (result.ok && data) {
 			data = { ...data, signups: new Map(data.signups).set(eventId, result.names) };
@@ -212,6 +234,8 @@
 		} else {
 			openedFromLink = true;
 			detailId = linkedId;
+			const event = findEvent(linkedId);
+			if (event) analytics.track('event_detail_view', { ...base(event), origen: 'link' });
 		}
 	});
 </script>

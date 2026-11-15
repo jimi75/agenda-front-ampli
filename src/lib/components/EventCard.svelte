@@ -1,4 +1,5 @@
 <script>
+	import { getContext } from 'svelte';
 	import { formatRange } from '#lib/events.js';
 	import { T } from '#lib/texts.js';
 
@@ -16,6 +17,7 @@
 	 * }}
 	 */
 	let { event, count, dateLabel, state: participation, mine, canUnsign, ondetail, onparticipate, onunsign } = $props();
+	const analytics = /** @type {import('#lib/analytics.js').Analytics} */ (getContext('analytics'));
 
 	const CONFIRM_MS = 5000;
 
@@ -94,6 +96,7 @@
 		<p class="place">
 			{#if event.mapUrl}
 				<a href={event.mapUrl} target="_blank" rel="noopener noreferrer" title={T.mapTitle}
+					onclick={() => analytics.track('map_click', { activitat_id: event.id, origen: 'card' })}
 					>{event.place}<span class="sr-only"> {T.newTab}</span></a
 				>
 			{:else}

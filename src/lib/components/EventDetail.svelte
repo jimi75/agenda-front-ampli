@@ -1,5 +1,5 @@
 <script>
-	import { flushSync, tick, untrack } from 'svelte';
+	import { flushSync, getContext, tick, untrack } from 'svelte';
 	import { formatRange } from '#lib/events.js';
 	import { renderPoster } from '#lib/poster.js';
 	import { downloadFile, isImageFile, shareImage, shareText, waLink } from '#lib/share.js';
@@ -20,6 +20,12 @@
 	 */
 	// `state` is the public prop name; locally it is `participation` because `$state` would clash with it.
 	let { event, names, state: participation, dateLabel, url, notFound, onclose, onparticipate } = $props();
+	const analytics = /** @type {import('#lib/analytics.js').Analytics} */ (getContext('analytics'));
+
+	/** @param {string} itemId @param {'default' | 'custom'} imatge @param {string} resultat */
+	function report(itemId, imatge, resultat) {
+		analytics.track('share', { method: 'web_share', content_type: 'activitat', item_id: itemId, imatge, resultat });
+	}
 
 	/** @type {HTMLDialogElement | undefined} */
 	let dialog = $state();
@@ -165,16 +171,19 @@
 	/** First tap: generates the image and shares it. */
 	async function shareFirst() {
 		if (!event) return;
+		const itemId = event.id;
 		shareView = 'idle';
 		const { file, stale } = await generate();
 		if (stale) return;
 		if (!file) {
+			report(itemId, 'default', 'generation_failed');
 			shareView = 'failed';
 			return;
 		}
 		const token = epoch;
 		sharing = true;
 		const outcome = await shareImage(file, text);
+		if (outcome !== 'needs-second-tap') report(itemId, 'default', outcome);
 		if (token !== epoch) return;
 		sharing = false;
 		if (outcome === 'needs-second-tap') {
@@ -188,13 +197,15 @@
 	/** Second tap: `shareImage` is called with no `await` before it, so the tap keeps its activation. */
 	function shareSecond() {
 		const file = readyFile;
-		if (!file) return;
+		if (!file || !event) return;
+		const itemId = event.id;
 		const token = epoch;
 		const pending = shareImage(file, text, { second: true });
 		readyFile = null;
 		shareView = 'idle';
 		sharing = true;
 		pending.then((outcome) => {
+			report(itemId, 'default', outcome);
 			if (token !== epoch) return;
 			sharing = false;
 			if (outcome === 'unsupported' || outcome === 'error') fallbackWithDownload(file);
@@ -308,13 +319,21 @@
 	 * @param {File} file @param {number} token @param {boolean} second
 	 */
 	function startCustomShare(file, token, second) {
+		if (!event) return;
+		const itemId = event.id;
 		const flight = { epoch, token };
 		customFlight = flight;
 		sharing = true;
 		const pending = shareImage(file, text, second ? { second: true } : undefined);
 		pending.then(
-			(outcome) => settleCustomShare(flight, file, second, outcome),
-			() => settleCustomShare(flight, file, second, 'error')
+			(outcome) => {
+				if (outcome !== 'needs-second-tap') report(itemId, 'custom', outcome);
+				settleCustomShare(flight, file, second, outcome);
+			},
+			() => {
+				report(itemId, 'custom', 'error');
+				settleCustomShare(flight, file, second, 'error');
+			}
 		);
 	}
 
@@ -378,6 +397,7 @@
 					<p class="where">
 						{#if event.mapUrl}
 							<a href={event.mapUrl} target="_blank" rel="noopener noreferrer" title={T.mapTitle}
+								onclick={() => analytics.track('map_click', { activitat_id: event.id, origen: 'detail' })}
 								>{event.place}<span class="sr-only"> {T.newTab}</span></a
 							>
 						{:else}
@@ -457,6 +477,7 @@
 						{/if}
 						{#if showWaLink}
 							<a class="action" href={waLink(text)} target="_blank" rel="noopener noreferrer"
+								onclick={() => analytics.track('share', { method: 'whatsapp_link', content_type: 'activitat', item_id: event.id, imatge: 'default', resultat: 'opened' })}
 								>{T.share.waLink}<span class="sr-only"> {T.newTab}</span></a
 							>
 						{/if}
