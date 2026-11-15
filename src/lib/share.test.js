@@ -44,10 +44,11 @@ test('shareText: plantilla completa amb data, hora, lloc i enllaç del detall', 
 	assertWellFormedShareText(text);
 });
 
-test('shareText: l’enllaç extern substitueix el del detall', () => {
-	const text = shareText({ ...EVENT, externalUrl: 'https://example.org/inscripcio' }, DATE_LABEL, DETAIL_URL);
-	assert.ok(text.endsWith('🔗 Més detalls i inscripcions: https://example.org/inscripcio'));
-	assert.ok(!text.includes(DETAIL_URL));
+test('shareText: un esdeveniment amb externalUrl enllaça al detall de l’app', () => {
+	const ext = { ...EVENT, externalUrl: 'https://example.org/inscripcio' };
+	const text = shareText(ext, DATE_LABEL, DETAIL_URL);
+	assert.ok(text.includes(DETAIL_URL));
+	assert.ok(!text.includes('https://example.org/inscripcio'));
 	assertWellFormedShareText(text);
 });
 

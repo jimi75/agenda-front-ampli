@@ -1,5 +1,7 @@
 import { MONTH } from './config.js';
 
+const NEW_TAB = '(s’obre en una pestanya nova)';
+
 export const T = {
 	siteTitle: (/** @type {import('./districts.js').District} */ district) => `Agenda Frontamplista ${district.name}`,
 	siteDescription: (/** @type {import('./districts.js').District} */ district) =>
@@ -10,7 +12,7 @@ export const T = {
 	legendLabel: 'Tipus d’activitat',
 	today: 'Avui',
 	ofMonth: `de ${MONTH.name}`,
-	newTab: '(s’obre en una pestanya nova)',
+	newTab: NEW_TAB,
 	noJs: 'Aquesta agenda necessita JavaScript per funcionar.',
 	loading: 'Carregant l’agenda…',
 	empty: 'Encara no hi ha cap activitat programada.',
@@ -93,6 +95,10 @@ export const T = {
 			'El teu nom serà visible per a qualsevol persona que tingui l’enllaç. Posa-hi només el teu nom de pila o un àlies.',
 		nameLabel: 'El teu nom o àlies',
 		submit: 'Apunta’m',
+		submitExternal: 'Continua a la inscripció ↗',
+		submitExternalLabel: `Continua a la inscripció ${NEW_TAB}`,
+		goExternal: 'Ves a la inscripció externa ↗',
+		goExternalLabel: `Ves a la inscripció externa ${NEW_TAB}`,
 		sending: 'Enviant…',
 		success: 'Fet! S’ha registrat la teva participació.',
 		closed: 'Les inscripcions estan tancades.',

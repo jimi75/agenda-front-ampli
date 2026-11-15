@@ -18,13 +18,13 @@ test('closed quan B1 és NO', () => {
 	assert.equal(participationState(event(), { today, signupsOpen: false }), 'closed');
 });
 
-test('external ignora signupsOpen', () => {
+test('un esdeveniment amb externalUrl és open o closed com els altres', () => {
 	const external = event({ externalUrl: 'https://example.org/inscripcio' });
-	assert.equal(participationState(external, { today, signupsOpen: true }), 'external');
-	assert.equal(participationState(external, { today, signupsOpen: false }), 'external');
+	assert.equal(participationState(external, { today, signupsOpen: true }), 'open');
+	assert.equal(participationState(external, { today, signupsOpen: false }), 'closed');
 });
 
-test('cancel·lat guanya a extern i a tancat', () => {
+test('cancel·lat guanya a tancat, també amb externalUrl', () => {
 	const cancelled = event({ status: 'cancelled', externalUrl: 'https://example.org/inscripcio' });
 	assert.equal(participationState(cancelled, { today, signupsOpen: true }), 'cancelled');
 	assert.equal(participationState(event({ status: 'cancelled' }), { today, signupsOpen: false }), 'cancelled');
@@ -40,7 +40,7 @@ test('un esdeveniment d’avui no és passat', () => {
 	assert.equal(participationState(event({ date: '2026-11-09' }), { today, signupsOpen: true }), 'past');
 });
 
-test('sense el camp externalUrl (R1) no és external', () => {
+test('sense el camp externalUrl (R1) és open', () => {
 	const plain = { date: '2026-11-12', status: '' };
 	assert.equal(participationState(plain, { today, signupsOpen: true }), 'open');
 	assert.equal(participationState(event({ externalUrl: '' }), { today, signupsOpen: true }), 'open');

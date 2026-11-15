@@ -12,8 +12,8 @@ export function detailUrl(location, id) {
 
 /**
  * Builds the share text from the fixed template. Lines whose source field is empty are omitted,
- * and empty blocks are dropped.
- * @param {Pick<import('./events.js').AgendaEvent, 'name' | 'start' | 'end' | 'place' | 'externalUrl'>} event
+ * and empty blocks are dropped. The link is always the event detail in the app.
+ * @param {Pick<import('./events.js').AgendaEvent, 'name' | 'start' | 'end' | 'place'>} event
  * @param {string} dateLabel
  * @param {string} url
  * @returns {string}
@@ -32,7 +32,7 @@ export function shareText(event, dateLabel, url) {
 	const blocks = [
 		name ? [T.share.title(name)] : [],
 		whenAndWhere,
-		[T.share.link(event.externalUrl || url)]
+		[T.share.link(url)]
 	];
 	return blocks.filter((lines) => lines.length).map((lines) => lines.join('\n')).join('\n\n');
 }
