@@ -13,6 +13,44 @@ export const T = {
 	today: 'Avui',
 	ofMonth: `de ${MONTH.name}`,
 	newTab: NEW_TAB,
+	consent: {
+		label: 'Galetes',
+		text: "Fem servir galetes de Google Analytics per saber, sense el teu nom, com es fa servir l'agenda. Google (EUA) rebrà aquestes dades. Només les activarem si acceptes. Pots canviar d'opinió a «Galetes», al peu de la pàgina.",
+		more: 'Més informació',
+		accept: 'Acceptar',
+		reject: 'Rebutjar',
+		now: (/** @type {import('#lib/analytics.js').ConsentState} */ state) => state === 'granted' ? 'Ara: acceptades' : 'Ara: rebutjades'
+	},
+	footer: {
+		consent: 'Galetes',
+		policy: 'Política de galetes',
+		privacy: 'Privacitat (Barcelona en Comú) ↗'
+	},
+	cookiesPage: {
+		title: 'Política de galetes · Agenda Frontamplista',
+		heading: 'Política de galetes',
+		sections: [
+			{ heading: 'Què són les galetes', paragraphs: ["Les galetes són petits fitxers que un web desa al teu navegador. Aquest web també desa informació al teu navegador amb l'emmagatzematge local (localStorage), que funciona de manera semblant."] },
+			{ heading: 'Què fem servir', paragraphs: [] },
+			{ heading: 'Què recollim', paragraphs: ["Si acceptes, Google Analytics rep quines pàgines i activitats mires, si obres el mapa, si comences, acabes o anul·les una inscripció, si comparteixes una activitat i el districte de l'agenda. No enviem el teu nom ni cap text que escriguis. Google guarda aquestes dades associades a un identificador del teu navegador, sense el teu nom."] },
+			{ heading: 'Qui rep les dades', paragraphs: ["Google Ireland Limited, que pot transferir les dades als Estats Units sota el Marc de Privacitat de Dades UE-EUA (EU-US Data Privacy Framework). Hem desactivat Google signals i la personalització d'anuncis."] },
+			{ heading: 'Quant de temps', paragraphs: ['Google Analytics conserva les dades 14 mesos. Les galetes `_ga` caduquen als 13 mesos.'] },
+			{ heading: 'Responsable', paragraphs: ["La coordinació de l'Agenda Frontamplista de Barcelona en Comú Sants-Montjuïc, que gestiona aquesta analítica per als tres districtes. Contacte: santsmontjuic@bcnencomu.cat. La [política de privacitat de Barcelona en Comú](https://barcelonaencomu.cat/politica-de-privacitat/) s'aplica a les inscripcions, però no a aquesta analítica."] },
+			{ heading: "Com canviar d'opinió", paragraphs: ["Prem «Galetes» al peu de qualsevol pàgina de l'agenda i tria «Rebutjar». Esborrarem les galetes `_ga` i deixarem d'enviar dades. També pots esborrar les galetes des de la configuració del navegador."] }
+		],
+		table: {
+			caption: 'Galetes i dades desades al navegador',
+			headers: ['Nom', 'Titular', 'Finalitat', 'Durada', 'Tipus'],
+			rows: [
+				['_ga', 'Google', 'Distingir navegadors per comptar visites', '13 mesos', 'Analítica, opcional'],
+				['_ga_XX3RJ48NN2', 'Google', "Mantenir l'estat de la sessió de Google Analytics", '13 mesos', 'Analítica, opcional'],
+				['agenda-front-ampli:consent', 'Agenda Frontamplista', "Recordar si has acceptat o rebutjat les galetes d'analítica", '13 mesos', 'Necessària'],
+				['agenda-…', 'Agenda Frontamplista', "Còpia de l'agenda per obrir-la sense connexió i les teves inscripcions (inclou el nom i el codi per desapuntar-te)", "Fins que l'esborris", 'Necessària']
+			]
+		},
+		updated: 'Actualitzat el 15 de novembre de 2026.',
+		back: "Torna a l'agenda"
+	},
 	noJs: 'Aquesta agenda necessita JavaScript per funcionar.',
 	loading: 'Carregant l’agenda…',
 	empty: 'Encara no hi ha cap activitat programada.',

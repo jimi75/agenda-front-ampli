@@ -7,11 +7,16 @@ import {
 	missingPrefix,
 	mineKey,
 	ROOT_DISTRICT,
+	RESERVED_SLUGS,
 	ROUTED_DISTRICTS,
 	storageKey
 } from './districts.js';
 
 const all = [ROOT_DISTRICT, ...ROUTED_DISTRICTS];
+
+test('no district uses a reserved static route', () => {
+	for (const { slug } of all) assert.ok(!RESERVED_SLUGS.includes(slug));
+});
 
 test('every slug follows the slug rule and none repeats', () => {
 	for (const { slug } of all) assert.match(slug, /^[a-z0-9-]{1,30}$/);

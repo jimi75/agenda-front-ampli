@@ -25,6 +25,10 @@ const row = (/** @type {Record<string, string>} */ extra) => ({
 	...extra
 });
 
+test('parseEventParam ignores sharing UTMs', () => {
+	assert.equal(parseEventParam('?e=sm-12&utm_source=compartir&utm_medium=share'), 'sm-12');
+});
+
 test('formatRange: hores soles, amb minuts i sense hora de fi', () => {
 	assert.equal(formatRange('10:00', '14:00'), '10h-14h');
 	assert.equal(formatRange('09:00', '12:30'), '9h-12.30h');

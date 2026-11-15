@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detailUrl, downloadFile, isImageFile, shareImage, shareText, waLink } from './share.js';
+import { detailUrl, downloadFile, isImageFile, shareImage, shareText, shareUrl, waLink } from '#lib/share.js';
+
+test('shareUrl adds UTMs in the root and district, encodes ids and drops previous queries', () => {
+	for (const pathname of ['/', '/eixample']) {
+		const location = { origin: 'https://example.test', pathname, search: '?admin&e=x' };
+		assert.equal(shareUrl(location, 'a b&c'), `https://example.test${pathname}?e=a%20b%26c&utm_source=compartir&utm_medium=share`);
+	}
+});
 
 test('detailUrl: origen + ruta + ?e=, sense arrossegar ?admin ni altres paràmetres', () => {
 	const location = { origin: 'https://jimi75.github.io', pathname: '/agenda-front-ampli/', search: '?admin&e=altre', hash: '#x' };

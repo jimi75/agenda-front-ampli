@@ -2,6 +2,9 @@
  * @typedef {{ slug: string, name: string, deName: string, prefix: string | null }} District
  */
 
+/** Static routes take priority over `[[districte]]`. */
+export const RESERVED_SLUGS = Object.freeze(['galetes']);
+
 /** Served at `/`: sends no `d` and keeps the browser keys it always had. */
 /** @type {District} */
 export const ROOT_DISTRICT = Object.freeze({

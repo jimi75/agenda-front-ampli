@@ -10,6 +10,11 @@ export function detailUrl(location, id) {
 	return `${location.origin}${location.pathname}?e=${encodeURIComponent(id)}`;
 }
 
+/** @param {{ origin: string, pathname: string }} location @param {string} id */
+export function shareUrl(location, id) {
+	return `${detailUrl(location, id)}&utm_source=compartir&utm_medium=share`;
+}
+
 /**
  * Builds the share text from the fixed template. Lines whose source field is empty are omitted,
  * and empty blocks are dropped. The link is always the event detail in the app.
