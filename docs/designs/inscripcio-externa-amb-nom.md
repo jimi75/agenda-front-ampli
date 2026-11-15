@@ -1,7 +1,7 @@
 # Pedir el nombre antes de abrir la inscripción externa
 
 *   **Author:** Juan Peist
-*   **Status:** Proposed
+*   **Status:** Implemented
 *   **Date:** 2026-11-15
 
 --------------------------------------------------------------------------------

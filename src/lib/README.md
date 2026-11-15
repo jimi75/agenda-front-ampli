@@ -12,7 +12,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [mock-api.js](./mock-api.js): `createMockApi({ delay, storage, district })` → `AgendaApi` with in-memory sample events (dev only).
 - [my-signups.js](./my-signups.js): `readMine`, `addMine`, `removeMine`, `mineForEvent`, all with a storage key as last parameter (default `MY_SIGNUPS_KEY`); typedef `MySignup`.
 - [names.js](./names.js): `cleanName`, `validateName` (`'empty' | 'invalid_name'` errors).
-- [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'external' | 'closed' | 'open'`.
+- [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'closed' | 'open'`.
 - [share.js](./share.js): `detailUrl`, `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `isImageFile` (reported image MIME or the approved final-extension fallback only when MIME is empty), `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
 - [poster.js](./poster.js): `renderPoster(node, id)` → `Promise<File>` (`agenda-<id>.png`).
 - [poster-scale.js](./poster-scale.js): `posterScale(name, place)` → scale factor of the poster text (`1.9`, `1.5`, `1.15` or `1`) by character count.
@@ -31,7 +31,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [api.js](./api.js) `loadCopy()` returns the stored copy only if it is finite-dated and at most `MAX_COPY_AGE_MS` (1 h) old, else `null`; the page shows it first and refreshes silently.
 - [api.js](./api.js) `loadAgenda` falls back to the stored copy (`staleSince` = copy timestamp) only when the network fetch fails; with no valid copy the original error is rethrown.
 - [my-signups.js](./my-signups.js) storage format is `{ v: 1, items }`; corrupt JSON, wrong version, missing storage or malformed items read as an empty list, and all storage failures are swallowed.
-- [state.js:participationState](./state.js) priority is past, cancelled, external, closed, open.
+- [state.js:participationState](./state.js) priority is past, cancelled, closed, open.
 - [poster.js](./poster.js) rejects with `Error('image_failed')` when the font is missing, the PNG is fully transparent after one retry, or 20 s (`TIMEOUT_MS`) elapse.
 - [share.js:shareImage](./share.js) awaits nothing before `nav.share` so the tap keeps its user activation; capability-probe exceptions are `'error'`, and only a `NotAllowedError` from `share` becomes `'needs-second-tap'` on the first attempt. With `second: true`, it becomes `'error'`.
 - [share.js:detailUrl](./share.js) uses only `origin` + `pathname` + `?e=<id>`, never other query parameters (such as `?admin`).

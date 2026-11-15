@@ -21,6 +21,8 @@ SvelteKit routes. A static page, `[[districte]]`, served at `/` (root district) 
 - `openSignup` triggers a silent reload so the shown list is fresh.
 
 ## Side Effects
+- `signupDone(id)` closes the sign-up modal and opens the detail.
+- `signup()` reads `signupId` before any `await`, so it works after the dialog has closed.
 - Network through `createApi` to `VITE_AGENDA_API_URL`; `localStorage` through `browserStorage()`.
 - `console.warn` for skipped rows and missing headers.
 - DOM: `scrollIntoView` on `#dia-<date>`, focus on the `h1` when a link-opened detail closes, `visibilitychange` listener via `<svelte:document>`.
