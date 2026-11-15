@@ -4,16 +4,17 @@
 Framework-agnostic logic of the agenda web app: configuration constants, parsing and normalisation of sheet rows, the Apps Script client (real and mock), per-browser sign-up records, share/poster helpers and all user-facing Catalan texts. Modules are plain ES modules imported through the `#lib/*` alias (`package.json` `imports`). Svelte UI lives in [components](./components/README.md).
 
 ## Interface
+- [analytics.js](./analytics.js): `createAnalytics(deps)` → `Analytics` (`enabled`, `consent`, `accept`, `reject`, `load`, `track`); `readConsent`, `writeConsent`, `isAdmin`, `landingLocation`, `cleanParams`, `CATALOG`, `ERROR_TYPES`, `RESULTS`, `CONSENT_KEY`, `CONSENT_MAX_AGE_MS`; typedefs `Analytics`, `ConsentState`. Dependencies are injected; no Svelte or `$app/*` imports.
 - [config.js](./config.js): `MONTH` (2026-11, days 2–29), `TIME_ZONE` (`Europe/Madrid`), `MAX_NAME_LENGTH` (30), `MAX_MANAGER_LENGTH` (60), `REQUEST_TIMEOUT_MS` (15000), `STORAGE_KEY`, `MY_SIGNUPS_KEY` (the keys of the root district), `POSTER` (2048×1346).
 - [events.js](./events.js): `normalizeEvents(rows, month)` → `{ events, skipped }`, `groupByDate`, `parseType`, `parseStatus`, `httpsUrl`, `mapsUrl`, `parseEventParam`, `formatHour`, `formatRange`, `ID_RE`; typedefs `AgendaEvent`, `EventType`, `SkippedRow`.
 - [month.js](./month.js): `buildMonth(range)`, `isoDate`, `todayIso(now)`; typedefs `Day`, `MonthRange`.
-- [districts.js](./districts.js): `ROOT_DISTRICT` (Sants-Montjuïc, served at `/`), `ROUTED_DISTRICTS` (one page each, `/<slug>`), `findDistrict(slug)`, `storageKey(district)`, `mineKey(district)`, `eventsTabName(district)`, `missingPrefix(events, district)`; typedef `District` (`slug`, `name`, `deName`, `prefix`). The only list of districts; the root keeps `STORAGE_KEY` and `MY_SIGNUPS_KEY`.
+- [districts.js](./districts.js): `ROOT_DISTRICT` (Sants-Montjuïc, served at `/`), `ROUTED_DISTRICTS` (one page each, `/<slug>`), `RESERVED_SLUGS` (`galetes`, a static route that takes priority), `findDistrict(slug)`, `storageKey(district)`, `mineKey(district)`, `eventsTabName(district)`, `missingPrefix(events, district)`; typedef `District` (`slug`, `name`, `deName`, `prefix`). The only list of districts; the root keeps `STORAGE_KEY` and `MY_SIGNUPS_KEY`.
 - [api.js](./api.js): `createApi({ url, district, fetchFn, storage, now, timeoutMs, uuid })` → `AgendaApi` (`loadAgenda`, `signup`, `unsignup`), `parseAgenda(json, district = ROOT_DISTRICT)`, `browserStorage()`; typedefs `Agenda`, `LoadedAgenda`, `SignupResult`, `UnsignResult`, `AgendaApi`.
 - [mock-api.js](./mock-api.js): `createMockApi({ delay, storage, district })` → `AgendaApi` with in-memory sample events (dev only).
 - [my-signups.js](./my-signups.js): `readMine`, `addMine`, `removeMine`, `mineForEvent`, all with a storage key as last parameter (default `MY_SIGNUPS_KEY`); typedef `MySignup`.
 - [names.js](./names.js): `cleanName`, `validateName` (`'empty' | 'invalid_name'` errors).
 - [state.js](./state.js): `participationState(event, { today, signupsOpen })` → `'past' | 'cancelled' | 'closed' | 'open'`.
-- [share.js](./share.js): `detailUrl`, `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `isImageFile` (reported image MIME or the approved final-extension fallback only when MIME is empty), `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
+- [share.js](./share.js): `detailUrl`, `shareUrl` (adds `utm_source=compartir&utm_medium=share`), `shareText(event, dateLabel, url)` (builds the multi-line share text: title, date, time, place and link, omitting empty lines), `waLink`, `isImageFile` (reported image MIME or the approved final-extension fallback only when MIME is empty), `shareImage` (`'shared' | 'aborted' | 'needs-second-tap' | 'unsupported' | 'error'`), `downloadFile`.
 - [poster.js](./poster.js): `renderPoster(node, id)` → `Promise<File>` (`agenda-<id>.png`).
 - [poster-scale.js](./poster-scale.js): `posterScale(name, place)` → scale factor of the poster text (`1.9`, `1.5`, `1.15` or `1`) by character count.
 - [texts.js](./texts.js): `T`, the single object with every Catalan UI string (including `T.signupErrors` keyed by error code).
@@ -21,6 +22,7 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - Subdirectories: [components/](./components/README.md) (Svelte components). `assets/` holds only `favicon.svg` and has no contract.
 
 ## Invariants
+- Components contact analytics only through `track()` on the layout's `analytics` context. No event parameter carries names, free text, request IDs, removal secrets or external URLs; `CATALOG` filters custom event parameters. An empty measurement ID and `?admin` prevent all Google calls.
 - [events.js:normalizeEvents](./events.js) never throws on bad rows: invalid rows (bad `ID_RE` id, duplicate id, missing/out-of-range date, bad `HH:MM` start, empty name) go to `skipped`; `end` is kept only when it is a valid time after `start`; output is sorted by date, start, end, then sheet order.
 - [events.js:httpsUrl](./events.js) accepts only `https://` links without whitespace; `externalUrl` and custom map URLs go through it.
 - [config.js](./config.js) day range (`MONTH.firstDay`/`lastDay`) must match `FIRST_DAY`/`LAST_DAY` in `apps-script/Code.gs`; [names.js:NAME_RE](./names.js) must match `NAME_RE` in `Code.gs` (server rule is authoritative; first character is a letter or digit so names cannot start with `= + - @`).
@@ -34,10 +36,11 @@ Framework-agnostic logic of the agenda web app: configuration constants, parsing
 - [state.js:participationState](./state.js) priority is past, cancelled, closed, open.
 - [poster.js](./poster.js) rejects with `Error('image_failed')` when the font is missing, the PNG is fully transparent after one retry, or 20 s (`TIMEOUT_MS`) elapse.
 - [share.js:shareImage](./share.js) awaits nothing before `nav.share` so the tap keeps its user activation; capability-probe exceptions are `'error'`, and only a `NotAllowedError` from `share` becomes `'needs-second-tap'` on the first attempt. With `second: true`, it becomes `'error'`.
-- [share.js:detailUrl](./share.js) uses only `origin` + `pathname` + `?e=<id>`, never other query parameters (such as `?admin`).
+- [share.js:detailUrl](./share.js) uses only `origin` + `pathname` + `?e=<id>`, never other query parameters (such as `?admin`) or UTMs. Only `shareUrl` adds sharing UTMs.
 - [mock-api.js](./mock-api.js) mirrors the `Code.gs` contract and advertises `features: ['unsignup']`.
 
 ## Side Effects
+- [analytics.js](./analytics.js): writes `agenda-front-ampli:consent` (395 days), inserts async `gtag.js` only after consent, registers `storage` and persisted `pageshow` listeners, deletes the two host-only `_ga` cookies at the base path on rejection and reloads loaded pages when consent is withdrawn.
 - [api.js](./api.js): `fetch` GET `<url>?action=agenda` and POSTs to `<url>`; writes `storageKey(district)` (offline copy) and, via `my-signups.js`, `mineKey(district)` in `localStorage`; sets/clears an abort timer.
 - [my-signups.js](./my-signups.js): reads and writes the `localStorage` key it receives (`MY_SIGNUPS_KEY` by default).
 - [mock-api.js](./mock-api.js): `setTimeout` delay, mutates in-memory sign-ups, uses `crypto.randomUUID`, writes `mineKey(district)`.

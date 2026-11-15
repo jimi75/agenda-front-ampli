@@ -52,8 +52,9 @@ La web **no lleva los datos dentro**: los pide al abrirse. Cambiar un evento en 
 1. El repositorio debe ser **público** (GitHub Pages gratis lo exige).
 2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
 3. **Settings → Secrets and variables → Actions → pestaña Variables → New repository variable**: nombre `AGENDA_API_URL`, valor la **URL completa** del paso anterior (`https://script.google.com/macros/s/XXXX/exec`, no solo `/exec`). La publicación falla con un mensaje claro si falta o no tiene ese formato. Si cambias la variable después, relanza el despliegue (pestaña **Actions → Desplegar a GitHub Pages → Run workflow**), porque la URL se incrusta al compilar.
-4. Haz `push` a `main`. El flujo [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) comprueba los tipos, ejecuta los tests y las pruebas de navegador (Playwright: los proyectos `chromium` y `mobile` bloquean la publicación si fallan), compila y publica en `https://jimi75.github.io/agenda-front-ampli/`.
-5. **Si el CI está en rojo y hay que publicar una reversión** (`git revert` de la entrega): **Actions → Desplegar a GitHub Pages → Run workflow** y marca `skip_e2e`. Omite solo las pruebas de navegador; `npm run check` y `npm test` se ejecutan igual. Úsalo únicamente para desplegar una reversión.
+4. Antes de activar la analítica, completa *Analítica y galetes → Configuración de GA4 (antes de publicar)*. Después crea la variable de repositorio **`GA_ID`**, con valor **`G-XX3RJ48NN2`**, en la misma pestaña Variables (no es un secreto). Si falta, el despliegue avisa y publica sin analítica; si no cumple `^G-[A-Z0-9]+$`, falla.
+5. Haz `push` a `main`. El flujo [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) comprueba los tipos, ejecuta los tests y las pruebas de navegador (Playwright: los proyectos `chromium` y `mobile` bloquean la publicación si fallan), compila y publica en `https://jimi75.github.io/agenda-front-ampli/`.
+6. **Si el CI está en rojo y hay que publicar una reversión** (`git revert` de la entrega): **Actions → Desplegar a GitHub Pages → Run workflow** y marca `skip_e2e`. Omite solo las pruebas de navegador; `npm run check` y `npm test` se ejecutan igual. Úsalo únicamente para desplegar una reversión.
 
 ### 3. Comprobaciones después de publicar
 
@@ -176,6 +177,61 @@ Si faltan J1 y K1, la agenda funciona igual y esos campos salen vacíos. Si los 
 - **Duplicados**: se permiten y se cuentan. Dos personas pueden llamarse igual, así que no se deduplica por nombre. Si la respuesta del servidor se pierde y la web reintenta, el `request_id` evita que se escriba dos veces.
 - **Quién lo ve**: la lista de apuntados es pública para cualquiera que tenga el enlace (y la URL del script es pública, porque va en el código de la web). Es una decisión aceptada. El modal pide escribir solo el nombre de pila o un apodo. Con un grupo de unas 100 personas, un nombre de pila junto con un lugar y una hora puede identificar a alguien.
 - **Sin login**: cualquiera puede apuntar a otra persona o llenar la lista con basura. Lo que sí hace el servidor: solo acepta nombres de 1 a 30 caracteres que empiecen por letra o número (nunca `=`, `+`, `-`, `@`, para que no se interpreten como fórmulas), escribe en formato texto, y comprueba que el evento existe. Si hay abuso, pon `NO` en `Config!B1` (afecta a todos los distritos) y borra las filas desde la hoja. La baja no abre otra vía de abuso: sin el `request_id` de una fila (que está en la hoja, y la ven todos sus editores, no solo el dueño, y en el navegador de quien se apuntó) no se puede borrar, y con uno inventado el script responde `removed:false` sin tocar nada.
+
+## Analítica y galetes
+
+Google Analytics 4 se carga directamente con `gtag.js`, sin GTM, solo después de **Acceptar**. **Rebutjar** tiene el mismo peso visual. La decisión vale 13 meses para los tres distritos; antes de aceptar no se descarga ningún recurso de Google ni se envían datos. Con `?admin` no se mide. No se envían nombres, texto libre, URLs externas ni códigos para desapuntarse.
+
+Qué se mide: [catálogo cerrado de nueve eventos del diseño](docs/designs/analitica-ga4-galetes.md#catálogo-de-eventos). Todos llevan `districte`; los enlaces compartidos añaden `utm_source=compartir&utm_medium=share`. La [página de galetes](src/routes/galetes/+page.svelte) explica el tratamiento y el responsable.
+
+### Configuración de GA4 (antes de publicar)
+
+Completa esta lista **antes de crear `GA_ID`**:
+
+1. **Admin › Configuración de la cuenta:** aceptar las condiciones de tratamiento de datos.
+2. **Flujo de datos web:** URL `https://jimi75.github.io`, nombre «Agenda Frontamplista». Comprobar que el ID de medición es `G-XX3RJ48NN2`.
+3. **Configuración de la etiqueta de Google** (Flujo de datos › Configurar los ajustes de la etiqueta): comprobar que no hay nada activado que añada eventos o datos por su cuenta: sin datos proporcionados por los usuarios, sin dominios cruzados, sin reglas para crear o modificar eventos. Todo lo que se mide sale del código.
+4. **Medición mejorada:**
+   - *Vistas de página* activadas, con *Cambios de página basados en eventos del historial del navegador* desactivado. La app no navega dentro de la página. Con la opción desactivada, GA4 no envía `page_view` propios aunque algo cambie el historial, así que el único `page_view` es el que envía `load()`.
+   - Desactivados: desplazamientos, clics salientes, búsqueda en el sitio, interacciones con formularios, vídeo y descargas de archivos. Los clics en el mapa y en enlaces externos ya los mide el catálogo, y los demás no responden a ninguna pregunta de *The Problem*.
+5. **Recogida de datos:** Google signals desactivado, datos detallados de ubicación y dispositivo desactivados, personalización de anuncios desactivada en todas las regiones.
+6. **Conservación de datos:** 14 meses, con «Restablecer los datos de usuario con nueva actividad» desactivado.
+7. **Dimensiones personalizadas** (Admin › Visualización de datos › Definiciones personalizadas). Todas con ámbito **Evento**:
+
+   | Nombre | Parámetro |
+   | --- | --- |
+   | Districte | `districte` |
+   | ID de l'activitat | `activitat_id` |
+   | Tipus d'activitat | `activitat_tipus` |
+   | Inscripció externa | `externa` |
+   | Origen | `origen` |
+   | Tipus d'error | `error_type` |
+   | Imatge compartida | `imatge` |
+   | Resultat | `resultat` |
+
+   Son 8 de las 50 permitidas. `method` e `item_id` ya existen como dimensiones predefinidas.
+8. **Evento clave:** `signup_success`.
+9. **Explorar:**
+   - **Embudo cerrado:** paso 1 `signup_start`, paso 2 `signup_success`, «seguido indirectamente de», sin ventana de tiempo. Desglose por Districte, con Inscripció externa como segundo desglose. Se crea antes de publicar y se revisa al cabo de una semana, cuando haya datos para comprobar los pasos.
+   - **Exploración libre «Errors d'inscripció»:** filas Tipus d'error, columnas Districte, métrica Recuento de eventos, filtro `signup_error`.
+   - **Exploración libre «Compartir»:** filtro `share`; filas Método, Imatge compartida y Resultat.
+10. **Comprobación:** abrir la web publicada con `?ga_debug`, aceptar y seguir los pasos manuales de [Verification Plan](docs/designs/analitica-ga4-galetes.md#verification-plan). DebugView debe mostrar cada evento recorrido con `districte`.
+
+### Comprobación manual y retirada
+
+En una ventana privada, abre `https://jimi75.github.io/agenda-front-ampli/eixample?ga_debug` y acepta: DebugView debe mostrar un solo `page_view` con `districte=eixample`. Abre el detalle, el mapa, **Participar**, envía un nombre de prueba, desapúntate y comparte: comprueba `event_detail_view`, `map_click`, `signup_start`, `signup_success`, `unsignup` y `share`, cada uno con `districte`. `signup_error` y `external_link_click` se cubren en e2e, sin forzarlos en producción.
+
+Antes de aceptar, comprueba en Network que no hay peticiones a `googletagmanager.com` ni a `google-analytics.com`; rechazar debe mantenerlo así también al recargar otro distrito. Después de aceptar, `_ga` y `_ga_XX3RJ48NN2` deben tener ruta `/agenda-front-ampli` y ser solo del host (sin atributo Domain).
+
+Con varias pestañas de la agenda abiertas y consentimiento aceptado, pulsa **Galetes** en el pie y luego **Rebutjar**: las dos cookies desaparecen y todas las pestañas cargadas se recargan al detectar el cambio (también al volver de la caché del navegador). No debe salir ninguna petición posterior a Google. Los e2e interceptan Google con un script vacío: no sustituyen esta comprobación real.
+
+### Apagar o ampliar la analítica
+
+- Para apagarla, borra **`GA_ID`** en *Settings › Secrets and variables › Actions › Variables* y ejecuta otra vez *Actions › Desplegar a GitHub Pages › Run workflow*. Sin ID no hay franja, botón **Galetes** ni script; la política sigue publicada. Las cookies anteriores caducan solas o se pueden borrar desde el navegador.
+- Para añadir un evento:
+  1. Añádelo a `CATALOG` en [analytics.js](src/lib/analytics.js) y a [analytics.test.js](src/lib/analytics.test.js).
+  2. Si lleva un parámetro nuevo, crea su dimensión de evento en GA4.
+  3. Si cambia lo que se recoge, actualiza `T.cookiesPage` en [texts.js](src/lib/texts.js) y la fecha de `/galetes`.
 
 ## Distritos
 
@@ -327,6 +383,8 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 
 ## Decisiones y límites
 
+- **Analítica solo con consentimiento:** las visitas que rechazan se pierden y no se puede contar cuántas son. Los porcentajes del embudo solo describen a quienes aceptan; las inscripciones totales siguen en la hoja.
+
 - **Solo del 2 al 29 de noviembre de 2026.** Son cuatro semanas completas (de lunes a domingo). Los días están en `src/lib/config.js` (`MONTH.firstDay` y `MONTH.lastDay`) y, para la lista desplegable de la hoja, en `FIRST_DAY` y `LAST_DAY` de `apps-script/Code.gs`. Para otro mes habría que cambiar los dos sitios, el año y el mes en ambos, y los tests. Si cambias las fechas del script, vuelve a ejecutar `setup`: reconstruye la lista y borra las fechas sobrantes.
 - **Horas del desplegable (de 08:00 a 22:00).** Salen de `FIRST_TIME` y `LAST_TIME` en `apps-script/Code.gs`, en minutos desde las 00:00. Si solo borras celdas en `Config!F`, el desplegable cambia al momento, pero `setup` reconstruye esa lista desde el código y recupera el rango anterior; por eso el cambio duradero se hace en el código y se vuelve a ejecutar `setup`. Es solo una ayuda al rellenar la hoja: la web muestra cualquier hora válida (`HH:MM`) y un pegado la salta.
 - **Si Google falla**: la web muestra la última copia guardada en el dispositivo con el aviso "Dades de fa X min". Si no hay copia, muestra un error con botón *Torna-ho a provar*, nunca un calendario vacío.
@@ -354,6 +412,8 @@ npm run test:e2e   # pruebas de navegador (Playwright)
 
 Static SvelteKit site (`adapter-static`, prerendered) that reads and writes its data through a Google Apps Script web app bound to a Google Sheet. The browser talks to the script with `GET ?action=agenda` and `POST` actions `signup` / `unsignup`; see *Cómo funciona* above for the diagram.
 
+With analytics consent and a configured measurement ID, the shared layout loads `gtag.js` directly and Google creates host-only `_ga` cookies at the base path. `/galetes` documents this separate treatment.
+
 ## Local Interface & Invariants
 
 - [vite.config.js](./vite.config.js): SvelteKit plugin with `adapter-static`, runes mode forced outside `node_modules`; `paths.base` is `BASE_PATH` only when `NODE_ENV === 'production'`, otherwise `''`.
@@ -374,6 +434,7 @@ Static SvelteKit site (`adapter-static`, prerendered) that reads and writes its 
 
 ## Global Side Effects
 
+- Optional consent-gated `gtag.js` and Google Analytics requests; `_ga` and `_ga_XX3RJ48NN2` cookies at `/agenda-front-ampli`, and `agenda-front-ampli:consent` in `localStorage`. Withdrawal deletes the cookies and reloads loaded agenda tabs.
 - Google Sheet tabs `Esdeveniments`, `Inscripcions`, `Baixes`, `Config` (through `apps-script/Code.gs`).
 - Browser `localStorage` keys `agenda-sants-montjuic-2026-11` (offline copy, also shown first on load if at most 1 h old, then refreshed silently) and `agenda-sants-montjuic-2026-11:mine` (own sign-ups).
 - `npm run build` writes `build/`; `.github/workflows/deploy.yml` publishes it to GitHub Pages.

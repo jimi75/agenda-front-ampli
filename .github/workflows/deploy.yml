@@ -63,12 +63,24 @@ jobs:
             exit 1
           fi
 
+      - name: Comprovar l'ID de Google Analytics
+        env:
+          GA_ID: ${{ vars.GA_ID }}
+        run: |
+          if [ -z "$GA_ID" ]; then
+            echo "::warning::Falta la variable GA_ID: el web es publicarà sense analítica."
+          elif [[ ! "$GA_ID" =~ ^G-[A-Z0-9]+$ ]]; then
+            echo "::error::GA_ID no té el format G-XXXXXXXXXX (valor actual: $GA_ID)."
+            exit 1
+          fi
+
       - uses: actions/configure-pages@v6
 
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}
           VITE_AGENDA_API_URL: ${{ vars.AGENDA_API_URL }}
+          VITE_GA_ID: ${{ vars.GA_ID }}
 
       - uses: actions/upload-pages-artifact@v5
         with:
