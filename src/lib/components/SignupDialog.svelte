@@ -13,10 +13,11 @@
 	 *   mine: import('#lib/my-signups.js').MySignup[],
 	 *   onsubmit: (name: string) => Promise<import('#lib/api.js').SignupResult>,
 	 *   onunsign: (eventId: string, requestId: string) => Promise<import('#lib/api.js').UnsignResult>,
+	 *   ondone: (eventId: string) => void,
 	 *   onclose: () => void
 	 * }}
 	 */
-	let { event, dateLabel, features, mine, onsubmit, onunsign, onclose } = $props();
+	let { event, dateLabel, features, mine, onsubmit, onunsign, ondone, onclose } = $props();
 
 	const CONFIRM_MS = 5000;
 
@@ -38,6 +39,7 @@
 	// Bumped on every open: the answer of a removal started in an earlier opening is ignored.
 	let opening = 0;
 
+	const externalUrl = $derived(event?.externalUrl ?? '');
 	const showMine = $derived(features.includes('unsignup') && (mine.length > 0 || unsignMessage !== ''));
 
 	function clearConfirm() {
@@ -101,6 +103,15 @@
 		}
 		phase = 'sending';
 		error = '';
+		if (externalUrl) {
+			if (!event) return;
+			// window.open before any await keeps the user activation; onsubmit before ondone because the page reads signupId synchronously
+			window.open(externalUrl, '_blank', 'noopener,noreferrer');
+			const id = event.id;
+			onsubmit(check.name).catch(() => {});
+			ondone(id);
+			return;
+		}
 		const result = await onsubmit(check.name);
 		if (result.ok) {
 			phase = 'done';
@@ -139,6 +150,15 @@
 				<p class="success" role="status">{T.dialog.success}</p>
 				{#if features.includes('unsignup')}<p class="hint">{T.participation.hint}</p>{/if}
 			{:else}
+				{#if externalUrl && mine.length > 0}
+					<a
+						class="button external"
+						href={externalUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						aria-label={T.dialog.goExternalLabel}>{T.dialog.goExternal}</a
+					>
+				{/if}
 				<form onsubmit={submit} novalidate>
 					<label for="signup-name">{T.dialog.nameLabel}</label>
 					<input
@@ -156,8 +176,13 @@
 					/>
 					<p id="signup-privacy" class="privacy">{T.dialog.privacy}</p>
 					<p class="error" role="alert">{error}</p>
-					<button type="submit" class="submit" disabled={phase === 'sending'}>
-						{phase === 'sending' ? T.dialog.sending : T.dialog.submit}
+					<button
+						type="submit"
+						class="submit"
+						disabled={phase === 'sending'}
+						aria-label={externalUrl ? T.dialog.submitExternalLabel : undefined}
+					>
+						{phase === 'sending' ? T.dialog.sending : externalUrl ? T.dialog.submitExternal : T.dialog.submit}
 					</button>
 				</form>
 			{/if}
@@ -328,6 +353,19 @@
 		color: var(--lime);
 		font: 700 1.05rem/1 var(--font-text);
 		cursor: pointer;
+	}
+
+	.external {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 48px;
+		margin-top: 0.75rem;
+		border: 2px solid var(--rust);
+		border-radius: 4px;
+		color: var(--rust);
+		font: 700 1.05rem/1 var(--font-text);
+		text-decoration: none;
 	}
 
 	.submit:disabled {

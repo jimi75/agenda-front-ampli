@@ -105,42 +105,32 @@
 		<p class="manager">{T.card.manager(event.manager)}</p>
 	{/if}
 	<div class="actions">
-		{#if participation === 'external'}
-			<a
-				class="button"
-				href={event.externalUrl}
-				target="_blank"
-				rel="noopener noreferrer"
-				aria-label="{T.participateLabel(event.name, dateLabel)} {T.newTab}">{T.participate}</a
+		<p class="count">{T.count(count)}</p>
+		{#if showUnsign}
+			<button
+				type="button"
+				class="unsign"
+				class:confirm={confirming}
+				aria-label={T.unsignLabel(event.name, dateLabel)}
+				disabled={unsigning}
+				onclick={unsign}
 			>
+				{unsigning
+					? T.participation.unsigning
+					: confirming
+						? T.participation.unsignConfirm
+						: T.participation.unsign}
+			</button>
 		{:else}
-			<p class="count">{T.count(count)}</p>
-			{#if showUnsign}
-				<button
-					type="button"
-					class="unsign"
-					class:confirm={confirming}
-					aria-label={T.unsignLabel(event.name, dateLabel)}
-					disabled={unsigning}
-					onclick={unsign}
-				>
-					{unsigning
-						? T.participation.unsigning
-						: confirming
-							? T.participation.unsignConfirm
-							: T.participation.unsign}
-				</button>
-			{:else}
-				<button
-					type="button"
-					aria-label={participation === 'open'
-						? T.participateLabel(event.name, dateLabel)
-						: T.viewSignupsLabel(event.name, dateLabel)}
-					onclick={() => (participation === 'open' ? onparticipate(event.id) : ondetail(event.id))}
-				>
-					{participation === 'open' ? T.participate : T.viewSignups}
-				</button>
-			{/if}
+			<button
+				type="button"
+				aria-label={participation === 'open'
+					? T.participateLabel(event.name, dateLabel)
+					: T.viewSignupsLabel(event.name, dateLabel)}
+				onclick={() => (participation === 'open' ? onparticipate(event.id) : ondetail(event.id))}
+			>
+				{participation === 'open' ? T.participate : T.viewSignups}
+			</button>
 		{/if}
 	</div>
 	<p class="unsign-result" role="status">{message}</p>
@@ -268,8 +258,7 @@
 		font-weight: 600;
 	}
 
-	button,
-	.button {
+	button {
 		display: inline-flex;
 		align-items: center;
 		min-height: 44px;

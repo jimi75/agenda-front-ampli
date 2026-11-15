@@ -59,7 +59,7 @@
 	/** @type {HTMLElement | undefined} */
 	let posterNode = $state();
 	const visible = $derived(event !== null || notFound);
-	const canShare = $derived(participation === 'open' || participation === 'closed' || participation === 'external');
+	const canShare = $derived(participation === 'open' || participation === 'closed');
 	const busy = $derived(generating || sharing);
 	const showWaLink = $derived(shareView === 'fallback' || shareView === 'failed');
 	const text = $derived(event ? shareText(event, dateLabel, url) : '');
@@ -391,16 +391,12 @@
 
 				<section>
 					<h3>{T.detail.participation}</h3>
-					{#if participation !== 'external'}<p class="count">{T.count(names.length)}</p>{/if}
+					<p class="count">{T.count(names.length)}</p>
 					{#if participation === 'open'}
 						<button type="button" class="primary" onclick={() => onparticipate(event.id)}>
 							{T.participate}
 						</button>
-					{:else if participation === 'external'}
-						<a class="primary" href={event.externalUrl} target="_blank" rel="noopener noreferrer"
-							>{T.participate}<span class="sr-only"> {T.newTab}</span></a
-						>
-						<p class="note">{T.detail.externalNote}</p>
+						{#if event.externalUrl}<p class="note">{T.detail.externalNote}</p>{/if}
 					{:else if participation === 'closed'}
 						<p class="note">{T.dialog.closed}</p>
 					{:else if participation === 'past'}
@@ -410,21 +406,19 @@
 					{/if}
 				</section>
 
-				{#if participation !== 'external'}
-					<section>
-						<h3>{T.detail.listTitle}</h3>
-						{#if names.length === 0}
-							<p class="empty">{T.detail.listEmpty}</p>
-						{:else}
-							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<ul class="names" tabindex="0" aria-label={T.detail.listTitle}>
-								{#each names as person, i (i)}
-									<li>{person}</li>
-								{/each}
-							</ul>
-						{/if}
-					</section>
-				{/if}
+				<section>
+					<h3>{T.detail.listTitle}</h3>
+					{#if names.length === 0}
+						<p class="empty">{T.detail.listEmpty}</p>
+					{:else}
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<ul class="names" tabindex="0" aria-label={T.detail.listTitle}>
+							{#each names as person, i (i)}
+								<li>{person}</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
 
 				{#if canShare}
 					<section class="share">

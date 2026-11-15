@@ -145,8 +145,15 @@
 		load({ silent: true });
 	}
 
+	/** @param {string} id */
+	function signupDone(id) {
+		signupId = null;
+		detailId = id;
+	}
+
 	/** @param {string} name @returns {Promise<import('#lib/api.js').SignupResult>} */
 	async function signup(name) {
+		// read before any await; the dialog may already be closed
 		const id = signupId;
 		if (!api || !id || !data) return { ok: false, error: 'server' };
 		const result = await api.signup(id, name, data.signups.get(id)?.length ?? 0);
@@ -301,6 +308,7 @@
 	mine={signupId ? mine.filter((item) => item.eventId === signupId) : []}
 	onsubmit={signup}
 	onunsign={unsignup}
+	ondone={signupDone}
 	onclose={() => (signupId = null)}
 />
 
