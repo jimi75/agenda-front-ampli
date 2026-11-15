@@ -213,3 +213,32 @@ export async function trackPosters(page) {
 
 /** @param {import('@playwright/test').Page} page */
 export const postersRendered = (page) => page.evaluate(() => /** @type {any} */ (window).__posters);
+
+/** Replaces `window.open` before the page loads: every URL is kept in `window.__openCalls` and no tab opens. @param {import('@playwright/test').Page} page */
+export async function mockWindowOpen(page) {
+	await page.addInitScript(() => {
+		/** @type {string[]} */
+		const calls = [];
+		Object.assign(window, { __openCalls: calls });
+		window.open = (url) => {
+			calls.push(String(url));
+			return null;
+		};
+	});
+}
+
+/** The URLs the page passed to the mocked `window.open`. @param {import('@playwright/test').Page} page @returns {Promise<string[]>} */
+export function openCalls(page) {
+	return page.evaluate(() => /** @type {any} */ (window).__openCalls);
+}
+
+/** Local records written before the page loads, as an old visit would have left them. @param {import('@playwright/test').Page} page @param {string[]} ids */
+export async function seedMine(page, ids) {
+	const items = ids.map((eventId, i) => ({ eventId, requestId: `seed-request-${i}0001`, name: 'Eva' }));
+	await page.addInitScript(
+		({ key, items }) => {
+			if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ v: 1, items }));
+		},
+		{ key: MINE_KEY, items }
+	);
+}

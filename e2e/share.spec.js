@@ -378,11 +378,9 @@ for (const file of [
 	});
 }
 
-test('imatge pròpia en una inscripció externa: conserva el text i l’URL externs', async ({ page }) => {
-	const externalUrl = 'https://example.org/inscripcio';
+test('imatge pròpia en una inscripció externa: el text enllaça al detall de l’app', async ({ page }) => {
 	const expectedText =
-		'📢 *Jornada amb inscripció externa* 📢\n\n🗓️ Dijous 19 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: ' +
-		externalUrl;
+		'📢 *Jornada amb inscripció externa* 📢\n\n🗓️ Dijous 19 de novembre\n⏰ 10h-14h\n📍 Mercat de Sants\n\n🔗 Més detalls i inscripcions: http://localhost:5300/agenda-front-ampli/?e=ext-1';
 	const { custom, downloads, waLink } = await openDetail(page, { query: 'e=ext-1' });
 	await shareOwnImage(page, custom, {
 		name: 'external.png',

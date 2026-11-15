@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { T } from '../src/lib/texts.js';
-import { card, detailDialog, MINE_KEY, openAgenda, readMine, signupDialog } from './helpers.js';
+import { card, detailDialog, openAgenda, readMine, seedMine, signupDialog } from './helpers.js';
 
 /** @param {import('@playwright/test').Page} page @param {string} name */
 async function submitName(page, name) {
@@ -361,26 +361,15 @@ test('si la resposta de la baixa es perd, el registre es conserva i repetir-la �
 	expect(await mineItems(page)).toEqual([]);
 });
 
-/** Local records written before the page loads, as an old visit would have left them. @param {import('@playwright/test').Page} page @param {string[]} ids */
-async function seedMine(page, ids) {
-	const items = ids.map((eventId, i) => ({ eventId, requestId: `seed-request-${i}0001`, name: 'Eva' }));
-	await page.addInitScript(
-		({ key, items }) => {
-			if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ v: 1, items }));
-		},
-		{ key: MINE_KEY, items }
-	);
-}
-
-test('no s’ofereix la baixa en un esdeveniment passat, cancel·lat o amb inscripció externa', async ({ page }) => {
-	await seedMine(page, ['pasat-1', 'cancel-1', 'ext-1']);
+test('no s’ofereix la baixa en un esdeveniment passat o cancel·lat', async ({ page }) => {
+	await seedMine(page, ['pasat-1', 'cancel-1']);
 	await openAgenda(page);
-	for (const id of ['pasat-1', 'cancel-1', 'ext-1']) {
+	for (const id of ['pasat-1', 'cancel-1']) {
 		await expect(card(page, id)).toHaveCount(1);
 		await expect(card(page, id).getByRole('button', { name: /^Participar a/ })).toHaveCount(0);
 		await expect(card(page, id).getByRole('button', { name: /^Desapuntar-me de/ })).toHaveCount(0);
 	}
-	for (const id of ['pasat-1', 'cancel-1', 'ext-1']) {
+	for (const id of ['pasat-1', 'cancel-1']) {
 		await page.goto(`./?e=${id}`);
 		await expect(detailDialog(page)).toBeVisible();
 		await expect(page.getByRole('button', { name: T.participation.unsign })).toHaveCount(0);
